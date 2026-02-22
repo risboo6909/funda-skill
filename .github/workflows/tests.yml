@@ -3,6 +3,7 @@ name: Tests
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -18,3 +19,27 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+  package:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ClawHub.ai upload folder
+        run: |
+          mkdir -p dist/clawhub-upload/scripts
+          cp SKILL.md dist/clawhub-upload/
+          cp README.md dist/clawhub-upload/
+          cp LICENSE dist/clawhub-upload/
+          cp scripts/funda_gateway.py dist/clawhub-upload/scripts/
+          cp scripts/requirements.txt dist/clawhub-upload/scripts/
+          cp scripts/tls_client.py dist/clawhub-upload/scripts/
+
+      - name: Upload ClawHub.ai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: funda-skill-clawhub-upload
+          path: dist/clawhub-upload
+          if-no-files-found: error
