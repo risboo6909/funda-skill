@@ -1,3 +1,4 @@
 pyfunda
 simple_http_server
 curl-cffi
+certifi
