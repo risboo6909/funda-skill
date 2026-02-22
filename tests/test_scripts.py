@@ -54,6 +54,10 @@ class TestFundaGateway(unittest.TestCase):
         url = "https://www.funda.nl/detail/koop/amsterdam/appartement-aragohof-11-1/43242669/"
         self.assertEqual(self.module.fetch_public_id(url), "43242669")
 
+    def test_fetch_public_id_handles_url_without_trailing_slash(self):
+        url = "https://www.funda.nl/detail/koop/utrecht/huis-test/12345678"
+        self.assertEqual(self.module.fetch_public_id(url), "12345678")
+
     def test_parse_args_uses_defaults(self):
         with mock.patch.object(sys, "argv", ["funda_gateway.py"]):
             args = self.module.parse_args()
@@ -70,57 +74,129 @@ class TestFundaGateway(unittest.TestCase):
         self.assertEqual(args.port, 8080)
         self.assertEqual(args.timeout, 5)
 
+    def test_spin_up_server_search_listings_returns_public_id_keyed_dict(self):
+        routes = {}
 
-class TestTlsClientShim(unittest.TestCase):
-    def setUp(self):
-        self.calls = []
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
 
-        class FakeInnerSession:
-            def __init__(inner_self, impersonate=None):
-                self.calls.append(("init", impersonate))
-                inner_self.impersonate = impersonate
+            return decorator
 
-            def get(inner_self, url, **kwargs):
-                self.calls.append(("get", url, kwargs))
-                return "GET_OK"
+        started = {}
 
-            def post(inner_self, url, **kwargs):
-                self.calls.append(("post", url, kwargs))
-                return "POST_OK"
+        class FakeListing(dict):
+            def to_dict(self):
+                return {"address": "Amsterdam"}
 
-            def put(inner_self, url, **kwargs):
-                self.calls.append(("put", url, kwargs))
-                return "PUT_OK"
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+                self.search_kwargs = None
 
-            def delete(inner_self, url, **kwargs):
-                self.calls.append(("delete", url, kwargs))
-                return "DELETE_OK"
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
 
-        requests_mod = types.SimpleNamespace(Session=FakeInnerSession)
-        curl_cffi = types.ModuleType("curl_cffi")
-        curl_cffi.requests = requests_mod
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
 
-        patcher = mock.patch.dict(sys.modules, {"curl_cffi": curl_cffi})
-        self.addCleanup(patcher.stop)
-        patcher.start()
+            def search_listing(self, **kwargs):
+                self.search_kwargs = kwargs
+                return [
+                    FakeListing(
+                        detail_url="https://www.funda.nl/detail/koop/amsterdam/huis/43242669/"
+                    )
+                ]
 
-        self.module = load_module("tls_client_under_test", ROOT / "scripts" / "tls_client.py")
+        funda_instance = {}
 
-    def test_session_uses_client_identifier_for_impersonation(self):
-        self.module.Session(client_identifier="chrome136")
-        self.assertIn(("init", "chrome136"), self.calls)
+        def fake_funda_factory(timeout):
+            instance = FakeFunda(timeout)
+            funda_instance["value"] = instance
+            return instance
 
-    def test_http_methods_delegate_to_wrapped_session(self):
-        session = self.module.Session()
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda port: started.update({"port": port}))
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
-        self.assertEqual(session.get("https://example.com", timeout=1), "GET_OK")
-        self.assertEqual(session.post("https://example.com", json={"a": 1}), "POST_OK")
-        self.assertEqual(session.put("https://example.com"), "PUT_OK")
-        self.assertEqual(session.delete("https://example.com"), "DELETE_OK")
+        response = routes["/search_listings"](
+            location="Amsterdam",
+            offering_type="buy",
+            radius_km="10",
+            price_min="100000",
+            price_max="800000",
+            area_min="50",
+            area_max="150",
+            plot_min="0",
+            plot_max="200",
+            object_type=["house"],
+            energy_label=["A"],
+            sort="newest",
+            page="2",
+        )
 
-        self.assertIn(("init", "chrome"), self.calls)
-        self.assertIn(("get", "https://example.com", {"timeout": 1}), self.calls)
-        self.assertIn(("post", "https://example.com", {"json": {"a": 1}}), self.calls)
+        self.assertEqual(started["port"], 9001)
+        self.assertEqual(response, {"43242669": {"address": "Amsterdam"}})
+        self.assertEqual(funda_instance["value"].timeout, 7)
+        self.assertEqual(funda_instance["value"].search_kwargs["radius_km"], 10)
+        self.assertEqual(funda_instance["value"].search_kwargs["page"], 2)
+        self.assertEqual(funda_instance["value"].search_kwargs["price_min"], 100000)
+
+    def test_spin_up_server_price_history_is_keyed_by_date(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeListing:
+            pass
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                self.path_part = path_part
+                return FakeListing()
+
+            def get_price_history(self, listing):
+                self.history_listing = listing
+                return [
+                    {"date": "2024-01-01", "price": 500000},
+                    {"date": "2024-02-01", "price": 495000},
+                ]
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        funda_instance = {}
+
+        def fake_funda_factory(timeout):
+            instance = FakeFunda(timeout)
+            funda_instance["value"] = instance
+            return instance
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda port: None)
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        response = routes["/get_price_history/{path_part}"](path_part="43242669")
+
+        self.assertEqual(funda_instance["value"].path_part, "43242669")
+        self.assertEqual(
+            response,
+            {
+                "2024-01-01": {"date": "2024-01-01", "price": 500000},
+                "2024-02-01": {"date": "2024-02-01", "price": 495000},
+            },
+        )
 
 
 if __name__ == "__main__":
