@@ -1,9 +1,5 @@
-![Alt text](https://media.istockphoto.com/id/486901291/photo/windmills-in-kinderdijk.jpg?s=1024x1024&w=is&k=20&c=X3izaNFjNd_qRh4xYdFHWUt3zHcASLpslATeGAx_vlw=)
-
 # Funda Skill
-
 [![Tests](https://github.com/risboo6909/funda-skill/actions/workflows/tests.yml/badge.svg)](https://github.com/risboo6909/funda-skill/actions/workflows/tests.yml)
-
 Some notes for people who want to use this skill.
 
 ## Disclaimer
@@ -45,7 +41,7 @@ The setup is intentionally simple.
 
 The agent starts a local HTTP server that acts as a gateway between the agent and the Funda API.  
 The agent sends HTTP requests to this local server, and the server:
-- calls the Funda API via PyFunda
+- calls the Funda API via [PyFunda](https://github.com/0xMH/pyfunda)
 - processes the results
 - returns structured data back to the agent
 
