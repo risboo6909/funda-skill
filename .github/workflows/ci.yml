@@ -1,12 +1,17 @@
-name: Tests
+name: CI
 
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: "3.11"
+  CLAWHUB_ARTIFACT_NAME: funda-skill-clawhub-upload
+
 jobs:
-  test:
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,14 +20,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
-  package:
+  package-clawhub:
+    name: Package ClawHub Artifact
     runs-on: ubuntu-latest
-    needs: test
+    needs: unit-tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,6 +46,6 @@ jobs:
       - name: Upload ClawHub.ai artifact
         uses: actions/upload-artifact@v4
         with:
-          name: funda-skill-clawhub-upload
+          name: ${{ env.CLAWHUB_ARTIFACT_NAME }}
           path: dist/clawhub-upload
           if-no-files-found: error

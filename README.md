@@ -1,4 +1,4 @@
-[![Tests](https://github.com/risboo6909/funda-skill/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/risboo6909/funda-skill/actions/workflows/tests.yml)
+[![CI](https://github.com/risboo6909/funda-skill/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/risboo6909/funda-skill/actions/workflows/ci.yml)
 
 # Funda Skill
 Some notes for people who want to use this skill.
