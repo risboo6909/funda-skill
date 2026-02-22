@@ -17,14 +17,10 @@ The service exposes REST endpoints to:
 
 The skill is intended for **local or trusted environments only**.
 
----
-
 ## Reference
 
 - Funda client implementation and parameters are based on:
   https://github.com/0xMH/pyfunda
-
----
 
 ## Preconditions
 
@@ -38,8 +34,6 @@ The agent must ensure:
 
 If dependencies are missing, the agent must install them before proceeding.
 
----
-
 ## Important Runtime Compatibility Note (READ FIRST)
 
 This gateway **does NOT require any system-level or native dependencies**.
@@ -47,6 +41,10 @@ This gateway **does NOT require any system-level or native dependencies**.
 Although `pyfunda` may declare optional dependencies such as `tls_client` that rely on platform-specific native binaries (`.so`, `.dylib`), **this gateway intentionally avoids using them**.
 
 ## Launch Instructions
+
+Don't try to query Funda.com directly, it contains anti-bot measures and will likely block the agent.
+
+Check if funda_gateway.py is already running. If it is, skip to the next section.
 
 Start the server using:
 
@@ -57,9 +55,9 @@ python gateway.py --port 9090 --timeout 10
 ### Arguments
 
 | Argument | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--port` | int | 9090 | TCP port to bind the HTTP server |
-| `--timeout` | int | 10 | Timeout (seconds) for upstream Funda API calls |
+|-------------|------|---------|------------------------------------------------|
+| `--port`    | int  | 9090    | TCP port to bind the HTTP server               |
+| `--timeout` | int  | 10      | Timeout (seconds) for upstream Funda API calls |
 
 ### Expected Behavior
 - Process runs in foreground
@@ -67,8 +65,6 @@ python gateway.py --port 9090 --timeout 10
 - No output implies successful startup
 
 If the port is already in use, the agent must retry with another port.
-
----
 
 ## Health Check
 
@@ -84,7 +80,21 @@ Expected result:
 - HTTP 200
 - Valid JSON object (can be empty)
 
----
+## URL Integrity Rule (Critical)
+
+All URLs returned by Funda (including image URLs, media URLs, and detail URLs)
+MUST be treated as **opaque strings**.
+
+The agent MUST:
+- preserve URLs **exactly as received**
+- never normalize, rewrite, reformat, concatenate, or simplify URLs
+- never remove or insert slashes, dots, or path segments
+
+❌ Example of forbidden transformation:
+
+`https://cloud.funda.nl/valentina_media/224/111/787.jpg` -> `https://cloud.funda.nl/valentina_media/224111787.jpg`
+
+If a URL is syntactically valid, it MUST be passed through unchanged.
 
 ## API Endpoints
 
@@ -106,8 +116,6 @@ curl http://localhost:9090/get_listing/43242669
 **Response**
 - JSON object returned by `listing.to_dict()`
 
----
-
 ### 2. Get Price History
 
 **Endpoint**
@@ -118,8 +126,6 @@ GET /get_price_history/{public_id}
 **Description**
 Returns historical price changes for a listing.
 
----
-
 ### 3. Search Listings
 
 **Endpoint**
@@ -127,21 +133,15 @@ Returns historical price changes for a listing.
 GET or POST /search_listings
 ```
 
----
-
 ## Supported Search Parameters
 
 See pyfunda reference for exact semantics.
-
----
 
 ## Security Notes
 
 - No authentication
 - No rate limiting
 - Must NOT be exposed publicly
-
----
 
 ## Skill Classification
 
