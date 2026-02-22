@@ -2,6 +2,8 @@
 
 # Funda Skill
 
+[![Tests](https://github.com/risboo6909/funda-skill/actions/workflows/tests.yml/badge.svg)](https://github.com/risboo6909/funda-skill/actions/workflows/tests.yml)
+
 Some notes for people who want to use this skill.
 
 ## Disclaimer
