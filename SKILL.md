@@ -40,6 +40,12 @@ If dependencies are missing, the agent must install them before proceeding.
 
 ---
 
+## Important Runtime Compatibility Note (READ FIRST)
+
+This gateway **does NOT require any system-level or native dependencies**.
+
+Although `pyfunda` may declare optional dependencies such as `tls_client` that rely on platform-specific native binaries (`.so`, `.dylib`), **this gateway intentionally avoids using them**.
+
 ## Launch Instructions
 
 Start the server using:
