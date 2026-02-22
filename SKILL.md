@@ -23,6 +23,8 @@ The skill is intended for **local or trusted environments only**.
 
 - Funda client implementation and parameters are based on:
   https://github.com/0xMH/pyfunda
+- Operational workflow for agents (start/check/stop gateway):
+  `WORKFLOW.md`
 
 ## Preconditions
 
