@@ -27,6 +27,23 @@ def fetch_public_id(url):
         raise ValueError(f"Invalid Funda listing URL: {url}")
 
 
+def _as_list_param(value):
+    if isinstance(value, list):
+        items = value
+    elif value is None:
+        return []
+    else:
+        items = [value]
+
+    result = []
+    for item in items:
+        if isinstance(item, str):
+            result.extend(part.strip() for part in item.split(",") if part.strip())
+        elif item is not None:
+            result.append(str(item))
+    return result
+
+
 def spin_up_server(server_port, funda_timeout):
     f = Funda(timeout=funda_timeout)
 
@@ -50,11 +67,13 @@ def spin_up_server(server_port, funda_timeout):
         area_max=Parameter("area_max", default="100"),  # Maximum living area (m²)
         plot_min=Parameter("plot_min", default="100"),  # Minimum plot area (m²)
         plot_max=Parameter("plot_max", default="150"),  # Maximum plot area (m²)
-        object_type=["house"],  # Property types (default: house, apartment)
-        energy_label=["A", "A+"],  # energy_label=['A', 'A+']
-        sort="newest",  # Sort order
-        page=0,  # Page number (15 results per page)
+        object_type=Parameter("object_type", default="house"),  # Property types
+        energy_label=Parameter("energy_label", default="A,A+"),  # Energy labels
+        sort=Parameter("sort", default="newest"),  # Sort order
+        page=Parameter("page", default="0"),  # Page number (15 results per page)
     ):
+        object_type = _as_list_param(object_type) or ["house"]
+        energy_label = _as_list_param(energy_label) or ["A", "A+"]
         results = f.search_listing(
             location=location,
             offering_type=offering_type,

@@ -58,6 +58,19 @@ class TestFundaGateway(unittest.TestCase):
         url = "https://www.funda.nl/detail/koop/utrecht/huis-test/12345678"
         self.assertEqual(self.module.fetch_public_id(url), "12345678")
 
+    def test_as_list_param_splits_csv_string(self):
+        self.assertEqual(self.module._as_list_param("A,B,C"), ["A", "B", "C"])
+
+    def test_as_list_param_keeps_list_and_splits_nested_csv_items(self):
+        self.assertEqual(
+            self.module._as_list_param(["house", "apartment,villa", ""]),
+            ["house", "apartment", "villa"],
+        )
+
+    def test_as_list_param_handles_none_and_non_string_items(self):
+        self.assertEqual(self.module._as_list_param(None), [])
+        self.assertEqual(self.module._as_list_param([1, None, "A"]), ["1", "A"])
+
     def test_parse_args_uses_defaults(self):
         with mock.patch.object(sys, "argv", ["funda_gateway.py"]):
             args = self.module.parse_args()
