@@ -34,6 +34,8 @@ On first run, the agent needs to:
 - install PyFunda and its Python dependencies
 - start a local HTTP gateway
 
+Security note: the gateway has no authentication or rate limiting. It should only be used in trusted local environments and binds only to loopback (`127.0.0.1`).
+
 Once the gateway (`funda_gateway.py`) is installed and running, subsequent requests should be much faster.
 
 ## How It Works

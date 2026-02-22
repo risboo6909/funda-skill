@@ -75,7 +75,7 @@ def spin_up_server(server_port, funda_timeout):
         }
         return response
 
-    server.start(port=server_port)
+    server.start(host="127.0.0.1", port=server_port)
 
 
 if __name__ == "__main__":

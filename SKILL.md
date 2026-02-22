@@ -80,7 +80,7 @@ python scripts/funda_gateway.py --port 9090 --timeout 10
 
 ### Expected Behavior
 - Process runs in foreground
-- Server listens on the specified port
+- Server listens on `127.0.0.1` and the specified port (defaults to `127.0.0.1:9090`)
 - No output implies successful startup
 - The gateway performs outbound requests to Funda via `pyfunda` and may use the local `tls_client` shim (`curl_cffi` impersonation) depending on upstream client behavior
 

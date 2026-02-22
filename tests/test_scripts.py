@@ -117,7 +117,11 @@ class TestFundaGateway(unittest.TestCase):
             return instance
 
         with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
-            self.module, "server", types.SimpleNamespace(start=lambda port: started.update({"port": port}))
+            self.module,
+            "server",
+            types.SimpleNamespace(
+                start=lambda host, port: started.update({"host": host, "port": port})
+            ),
         ), mock.patch.object(self.module, "Funda", fake_funda_factory):
             self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
@@ -138,6 +142,7 @@ class TestFundaGateway(unittest.TestCase):
         )
 
         self.assertEqual(started["port"], 9001)
+        self.assertEqual(started["host"], "127.0.0.1")
         self.assertEqual(response, {"43242669": {"address": "Amsterdam"}})
         self.assertEqual(funda_instance["value"].timeout, 7)
         self.assertEqual(funda_instance["value"].search_kwargs["radius_km"], 10)
@@ -183,7 +188,7 @@ class TestFundaGateway(unittest.TestCase):
             return instance
 
         with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
-            self.module, "server", types.SimpleNamespace(start=lambda port: None)
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
         ), mock.patch.object(self.module, "Funda", fake_funda_factory):
             self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
@@ -197,7 +202,6 @@ class TestFundaGateway(unittest.TestCase):
                 "2024-02-01": {"date": "2024-02-01", "price": 495000},
             },
         )
-
 
 if __name__ == "__main__":
     unittest.main()
