@@ -7,10 +7,20 @@ This file describes how an agent should manage the local Funda gateway safely.
 - Use the gateway only on `127.0.0.1`
 - Do not expose it publicly
 - Reuse an existing local `.venv` in the Funda skill folder when possible
+- Do not restart the gateway on every request; restart only after a skill update (or if the process is unhealthy)
 
 ## 1. Check if the gateway is already running
 
-Use a quick local check before starting a new process:
+Check by process name first (recommended):
+
+```bash
+pgrep -af "python.*scripts/funda_gateway.py"
+```
+
+If a matching process exists, reuse it.
+Do not restart it unless the skill was updated (files changed / new version deployed) or the process is unhealthy.
+
+Then optionally verify it is healthy:
 
 ```bash
 curl -s http://127.0.0.1:9090/search_listings >/dev/null
@@ -47,6 +57,12 @@ Notes:
 - The gateway binds to `127.0.0.1` only
 - If port `9090` is already in use by the gateway, startup will stop instead of launching another instance
 
+Restart policy:
+- Reuse an already running healthy gateway for normal requests
+- Restart only when:
+  - the skill was updated (new files/version deployed), or
+  - the gateway process is not responding / health check fails
+
 ## 4. Health check after start
 
 ```bash
@@ -63,11 +79,21 @@ Expected:
 
 If running in foreground, stop with `Ctrl+C`.
 
-If the process was started in background, find and stop it explicitly:
+Only stop/restart during normal operation if:
+- the skill was updated, or
+- the gateway is unhealthy / unresponsive
+
+If the process was started in background, stop it by process name:
+
+```bash
+pgrep -af "python.*scripts/funda_gateway.py"
+pkill -f "python.*scripts/funda_gateway.py"
+```
+
+Use a port-based check only for troubleshooting (for example, if some other process occupies `9090`):
 
 ```bash
 lsof -iTCP:9090 -sTCP:LISTEN -n -P
-kill <PID>
 ```
 
 ## 6. Troubleshooting
@@ -76,5 +102,5 @@ kill <PID>
   - activate `.venv`
   - reinstall requirements: `python -m pip install -r scripts/requirements.txt`
 - Port already in use:
-  - verify if the gateway is already running and reuse it
-  - otherwise stop the process using that port
+  - check `funda_gateway.py` process first and reuse/stop it
+  - if no gateway process exists, inspect which process is listening on `9090` via `lsof`
