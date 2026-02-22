@@ -1,4 +1,5 @@
 import argparse
+import socket
 
 from simple_http_server import PathValue, route, server
 from simple_http_server.basic_models import Parameter
@@ -44,7 +45,16 @@ def _as_list_param(value):
     return result
 
 
+def is_port_listening(port, host="127.0.0.1", timeout=0.5):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(timeout)
+        return sock.connect_ex((host, int(port))) == 0
+
+
 def spin_up_server(server_port, funda_timeout):
+    if is_port_listening(server_port):
+        raise RuntimeError(f"Gateway already running on 127.0.0.1:{server_port}")
+
     f = Funda(timeout=funda_timeout)
 
     @route("/get_listing/{path_part}", method=["GET"])

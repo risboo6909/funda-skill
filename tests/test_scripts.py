@@ -87,6 +87,15 @@ class TestFundaGateway(unittest.TestCase):
         self.assertEqual(args.port, 8080)
         self.assertEqual(args.timeout, 5)
 
+    def test_spin_up_server_refuses_to_start_if_port_is_listening(self):
+        with mock.patch.object(self.module, "is_port_listening", return_value=True), mock.patch.object(
+            self.module, "Funda"
+        ) as mock_funda:
+            with self.assertRaises(RuntimeError):
+                self.module.spin_up_server(server_port=9090, funda_timeout=10)
+
+        mock_funda.assert_not_called()
+
     def test_spin_up_server_search_listings_returns_public_id_keyed_dict(self):
         routes = {}
 
@@ -135,7 +144,9 @@ class TestFundaGateway(unittest.TestCase):
             types.SimpleNamespace(
                 start=lambda host, port: started.update({"host": host, "port": port})
             ),
-        ), mock.patch.object(self.module, "Funda", fake_funda_factory):
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
             self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         response = routes["/search_listings"](
@@ -202,7 +213,9 @@ class TestFundaGateway(unittest.TestCase):
 
         with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
             self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
-        ), mock.patch.object(self.module, "Funda", fake_funda_factory):
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
             self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         response = routes["/get_price_history/{path_part}"](path_part="43242669")
