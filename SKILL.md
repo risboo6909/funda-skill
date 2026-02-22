@@ -35,23 +35,14 @@ The agent must ensure:
 4. Network access to Funda endpoints
 
 If dependencies are missing, the agent must install them before proceeding.
-Use an unprivileged local virtual environment. Do not install system-wide unless explicitly requested.
+Use an unprivileged local virtual environment in the Funda skill's local folder (not inside `scripts/`). Do not install system-wide unless explicitly requested.
 
 ## Recommended Local Setup (Safe / Unprivileged)
 
-Create and use a local virtual environment in the repository:
-
-```bash
-python3 -m venv scripts/.venv
-source scripts/.venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r scripts/requirements.txt curl-cffi
-```
-
+Create and use a local virtual environment in the Funda skill's local folder.
 Notes:
 - `curl-cffi` is required by the local `scripts/tls_client.py` compatibility shim
 - avoid `sudo pip install ...`
-- keep the service bound to localhost / a trusted local environment only
 
 ## Important Runtime Compatibility Note (READ FIRST)
 
@@ -64,6 +55,10 @@ Although `pyfunda` may declare optional dependencies such as `tls_client` that r
 Don't try to query Funda.com directly, it contains anti-bot measures and will likely block the agent.
 
 Check if funda_gateway.py is already running. If it is, skip to the next section.
+
+Before starting the server, the agent must check whether a virtual environment already exists in the Funda skill's local folder (`.venv`).
+- If it exists: activate it and reuse it
+- If it does not exist: create it, install dependencies, then continue
 
 Start the server using:
 

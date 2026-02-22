@@ -56,3 +56,5 @@ This reduces errors, makes agent interaction more reliable, and allows new featu
 If you find this skill useful, please consider giving it a star on GitHub and sharing it with friends who are also searching for housing in the Netherlands.
 
 Thanks!
+
+[github repo](https://github.com/risboo6909/funda-skill)
