@@ -1,3 +1,5 @@
+![Alt text](https://media.istockphoto.com/id/486901291/photo/windmills-in-kinderdijk.jpg?s=1024x1024&w=is&k=20&c=X3izaNFjNd_qRh4xYdFHWUt3zHcASLpslATeGAx_vlw=)
+
 # Funda Skill
 
 Some notes for people who want to use this skill.
@@ -6,8 +8,6 @@ Some notes for people who want to use this skill.
 
 The author is not responsible for any issues that may occur while using this skill.  
 Use it at your own risk.
-
----
 
 ## Short Description
 
