@@ -10,7 +10,7 @@ compatibility: Python3, access to internet
 
 This skill provides a local HTTP gateway for interacting with Funda listings using a Python service built on top of **pyfunda** and **simple_http_server**.
 
-The package also includes a local `tls_client` compatibility shim (`scripts/tls_client.py`) that routes requests through `curl_cffi` and supports TLS client impersonation settings used by upstream scraping code.
+The package also includes a local `tls_client` compatibility shim (`tls_client.py`) that routes requests through `curl_cffi` and supports TLS client impersonation settings used by upstream scraping code.
 
 The service exposes REST endpoints to:
 - Fetch a single listing by public ID
@@ -41,14 +41,14 @@ Use an unprivileged local virtual environment in the Funda skill's local folder 
 
 Create and use a local virtual environment in the Funda skill's local folder.
 Notes:
-- `curl-cffi` is required by the local `scripts/tls_client.py` compatibility shim
+- `curl-cffi` is required by the local `tls_client.py` compatibility shim
 - avoid `sudo pip install ...`
 
 ## Important Runtime Compatibility Note (READ FIRST)
 
 This gateway **does NOT require any system-level or native dependencies**.
 
-Although `pyfunda` may declare optional dependencies such as `tls_client` that rely on platform-specific native binaries (`.so`, `.dylib`), this skill uses a local Python shim (`scripts/tls_client.py`) backed by `curl_cffi` instead of those native `tls_client` binaries.
+Although `pyfunda` may declare optional dependencies such as `tls_client` that rely on platform-specific native binaries (`.so`, `.dylib`), this skill uses a local Python shim (`tls_client.py`) backed by `curl_cffi` instead of those native `tls_client` binaries.
 
 ## Launch Instructions
 
@@ -63,7 +63,7 @@ Before starting the server, the agent must check whether a virtual environment a
 Start the server using:
 
 ```bash
-python scripts/funda_gateway.py --port 9090 --timeout 10
+python funda_gateway.py --port 9090 --timeout 10
 ```
 
 ### Arguments
