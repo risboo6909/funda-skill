@@ -150,6 +150,13 @@ Returns historical price changes for a listing.
 GET or POST /search_listings
 ```
 
+**Multi-page support**
+- Use `pages` (instead of `page`) to request one or multiple result pages.
+- `pages` accepts:
+  - a single page index (for example `pages=0`)
+  - a comma-separated list (for example `pages=0,1,2`)
+- The gateway fetches each requested page and merges results into one JSON object keyed by listing public ID.
+
 ## Supported Search Parameters
 
 See pyfunda reference for exact semantics.

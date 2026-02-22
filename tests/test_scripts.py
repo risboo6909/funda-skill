@@ -162,7 +162,7 @@ class TestFundaGateway(unittest.TestCase):
             object_type=["house"],
             energy_label=["A"],
             sort="newest",
-            page="2",
+            pages="2",
         )
 
         self.assertEqual(started["port"], 9001)
@@ -172,6 +172,76 @@ class TestFundaGateway(unittest.TestCase):
         self.assertEqual(funda_instance["value"].search_kwargs["radius_km"], 10)
         self.assertEqual(funda_instance["value"].search_kwargs["page"], 2)
         self.assertEqual(funda_instance["value"].search_kwargs["price_min"], 100000)
+
+    def test_search_listings_supports_multiple_pages_and_merges_results(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeListing(dict):
+            def to_dict(self):
+                return {"detail_url": self["detail_url"], "id": self["id"]}
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.calls = []
+
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                self.calls.append(kwargs["page"])
+                page = kwargs["page"]
+                return [
+                    FakeListing(
+                        detail_url=f"https://www.funda.nl/detail/koop/amsterdam/huis/{page}1111111/",
+                        id=page,
+                    )
+                ]
+
+        funda_instance = {}
+
+        def fake_funda_factory(timeout):
+            instance = FakeFunda(timeout)
+            funda_instance["value"] = instance
+            return instance
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        response = routes["/search_listings"](
+            location="Amsterdam",
+            offering_type="buy",
+            radius_km="5",
+            price_min="0",
+            price_max="500000",
+            area_min="40",
+            area_max="100",
+            plot_min="100",
+            plot_max="150",
+            object_type="house",
+            energy_label="A",
+            sort="newest",
+            pages="0,1,2",
+        )
+
+        self.assertEqual(funda_instance["value"].calls, [0, 1, 2])
+        self.assertEqual(
+            sorted(response.keys()),
+            ["01111111", "11111111", "21111111"],
+        )
 
     def test_spin_up_server_price_history_is_keyed_by_date(self):
         routes = {}

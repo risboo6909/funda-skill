@@ -80,28 +80,38 @@ def spin_up_server(server_port, funda_timeout):
         object_type=Parameter("object_type", default="house"),  # Property types
         energy_label=Parameter("energy_label", default="A,A+"),  # Energy labels
         sort=Parameter("sort", default="newest"),  # Sort order
-        page=Parameter("page", default="0"),  # Page number (15 results per page)
+        pages=Parameter("pages", default="0"),  # Page numbers (15 results per page)
     ):
         object_type = _as_list_param(object_type) or ["house"]
         energy_label = _as_list_param(energy_label) or ["A", "A+"]
-        results = f.search_listing(
-            location=location,
-            offering_type=offering_type,
-            radius_km=int(radius_km),
-            price_min=int(price_min),
-            price_max=int(price_max),
-            area_min=int(area_min),
-            area_max=int(area_max),
-            plot_min=int(plot_min),
-            plot_max=int(plot_max),
-            object_type=object_type,
-            energy_label=energy_label,
-            sort=sort,
-            page=int(page),
-        )
-        response = {
-            fetch_public_id(item["detail_url"]): item.to_dict() for item in results
-        }
+        pages = _as_list_param(pages) or ["0"]
+        pages = list(map(int, pages))
+
+        response = {}
+
+        for page in pages:
+            results = f.search_listing(
+                location=location,
+                offering_type=offering_type,
+                radius_km=int(radius_km),
+                price_min=int(price_min),
+                price_max=int(price_max),
+                area_min=int(area_min),
+                area_max=int(area_max),
+                plot_min=int(plot_min),
+                plot_max=int(plot_max),
+                object_type=object_type,
+                energy_label=energy_label,
+                sort=sort,
+                page=page,
+            )
+            response.update(
+                {
+                    fetch_public_id(item["detail_url"]): item.to_dict()
+                    for item in results
+                }
+            )
+
         return response
 
     server.start(host="127.0.0.1", port=server_port)
