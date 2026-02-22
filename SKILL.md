@@ -1,6 +1,6 @@
 ---
 name: funda
-description: Access Funda listings via a local pyfunda HTTP gateway with a tls_client compatibility shim
+description: Search and monitor Funda.nl housing listings via a local agent-friendly HTTP gateway
 compatibility: Python3, access to internet
 ---
 
