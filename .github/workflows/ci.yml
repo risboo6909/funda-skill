@@ -37,6 +37,7 @@ jobs:
         run: |
           mkdir -p dist/clawhub-upload/scripts
           cp SKILL.md dist/clawhub-upload/
+          cp WORKFLOW.md dist/clawhub-upload/
           cp README.md dist/clawhub-upload/
           cp scripts/funda_gateway.py dist/clawhub-upload/scripts/
           cp scripts/requirements.txt dist/clawhub-upload/scripts/
