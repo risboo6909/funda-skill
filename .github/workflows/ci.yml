@@ -38,7 +38,6 @@ jobs:
           mkdir -p dist/clawhub-upload/scripts
           cp SKILL.md dist/clawhub-upload/
           cp README.md dist/clawhub-upload/
-          cp LICENSE dist/clawhub-upload/
           cp scripts/funda_gateway.py dist/clawhub-upload/scripts/
           cp scripts/requirements.txt dist/clawhub-upload/scripts/
           cp scripts/tls_client.py dist/clawhub-upload/scripts/
