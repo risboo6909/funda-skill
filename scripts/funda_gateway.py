@@ -45,6 +45,26 @@ def _as_list_param(value):
     return result
 
 
+def _as_optional_int(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return int(text)
+
+
+def _as_optional_str(value):
+    if value is None:
+        return None
+    if isinstance(value, list):
+        if not value:
+            return None
+        value = value[0]
+    text = str(value).strip()
+    return text or None
+
+
 def is_port_listening(port, host="127.0.0.1", timeout=0.5):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
@@ -69,42 +89,49 @@ def spin_up_server(server_port, funda_timeout):
     @route("/search_listings", method=["GET", "POST"])
     def search_listings(
         location=Parameter("location", default="Amsterdam"),  # City or area name
-        offering_type=Parameter("offering_type", default="buy"),  # "buy" or "rent"
-        radius_km=Parameter("radius_km", default="5"),  # Search radius in kilometers
-        price_min=Parameter("price_min", default="0"),  # Minimum price
-        price_max=Parameter("price_max", default="500000"),  # Maximum price
-        area_min=Parameter("area_min", default="40"),  # Minimum living area (m²)
-        area_max=Parameter("area_max", default="100"),  # Maximum living area (m²)
-        plot_min=Parameter("plot_min", default="100"),  # Minimum plot area (m²)
-        plot_max=Parameter("plot_max", default="150"),  # Maximum plot area (m²)
-        object_type=Parameter("object_type", default="house"),  # Property types
-        energy_label=Parameter("energy_label", default="A,A+"),  # Energy labels
+        offering_type=Parameter("offering_type", default=""),  # "buy" or "rent"
+        availability=Parameter("availability", default=""),  # available/negotiations/sold
+        radius_km=Parameter("radius_km", default=""),  # Search radius in kilometers
+        price_min=Parameter("price_min", default=""),  # Minimum price
+        price_max=Parameter("price_max", default=""),  # Maximum price
+        area_min=Parameter("area_min", default=""),  # Minimum living area (m²)
+        area_max=Parameter("area_max", default=""),  # Maximum living area (m²)
+        plot_min=Parameter("plot_min", default=""),  # Minimum plot area (m²)
+        plot_max=Parameter("plot_max", default=""),  # Maximum plot area (m²)
+        object_type=Parameter("object_type", default=""),  # Property types
+        energy_label=Parameter("energy_label", default=""),  # Energy labels
         sort=Parameter("sort", default="newest"),  # Sort order
         pages=Parameter("pages", default="0"),  # Page numbers (15 results per page)
     ):
-        object_type = _as_list_param(object_type) or ["house"]
-        energy_label = _as_list_param(energy_label) or ["A", "A+"]
+        object_type = _as_list_param(object_type) or None
+        energy_label = _as_list_param(energy_label) or None
+        availability = _as_list_param(availability) or None
         pages = _as_list_param(pages) or ["0"]
         pages = list(map(int, pages))
+        offering_type = _as_optional_str(offering_type) or "buy"
+        sort = _as_optional_str(sort)
 
         response = {}
 
         for page in pages:
-            results = f.search_listing(
-                location=location,
-                offering_type=offering_type,
-                radius_km=int(radius_km),
-                price_min=int(price_min),
-                price_max=int(price_max),
-                area_min=int(area_min),
-                area_max=int(area_max),
-                plot_min=int(plot_min),
-                plot_max=int(plot_max),
-                object_type=object_type,
-                energy_label=energy_label,
-                sort=sort,
-                page=page,
-            )
+            search_kwargs = {
+                "location": location,
+                "offering_type": offering_type,
+                "availability": availability,
+                "radius_km": _as_optional_int(radius_km),
+                "price_min": _as_optional_int(price_min),
+                "price_max": _as_optional_int(price_max),
+                "area_min": _as_optional_int(area_min),
+                "area_max": _as_optional_int(area_max),
+                "plot_min": _as_optional_int(plot_min),
+                "plot_max": _as_optional_int(plot_max),
+                "object_type": object_type,
+                "energy_label": energy_label,
+                "sort": sort,
+                "page": page,
+            }
+            print(f"[funda_gateway] search_listing kwargs: {search_kwargs}")
+            results = f.search_listing(**search_kwargs)
             response.update(
                 {
                     fetch_public_id(item["detail_url"]): item.to_dict()

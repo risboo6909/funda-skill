@@ -157,6 +157,44 @@ GET or POST /search_listings
   - a comma-separated list (for example `pages=0,1,2`)
 - The gateway fetches each requested page and merges results into one JSON object keyed by listing public ID.
 
+**Parameter normalization behavior (important)**
+- `object_type`, `energy_label`, and `availability` accept:
+  - single values (`object_type=apartment`)
+  - repeated params (if the HTTP client sends multiple values)
+  - comma-separated values (`energy_label=A,B,C`)
+- Empty/omitted optional filters are passed to `pyfunda` as `None` (they do not apply restrictive gateway-side defaults).
+- `offering_type` defaults to `"buy"` when omitted.
+
+**Supported passthrough parameters (gateway -> pyfunda)**
+- `location`
+- `offering_type`
+- `availability` (e.g. `available`, `negotiations`, `sold`)
+- `radius_km`
+- `price_min`, `price_max`
+- `area_min`, `area_max`
+- `plot_min`, `plot_max`
+- `object_type`
+- `energy_label`
+- `sort`
+- `pages` (gateway-only convenience; internally mapped to multiple `page` calls)
+
+**Examples**
+```bash
+# Minimal search (broad, page 0 only)
+curl -sG "http://127.0.0.1:9090/search_listings" \
+  --data-urlencode "location=amsterdam" \
+  --data-urlencode "pages=0"
+
+# Multi-page + list filters via CSV
+curl -sG "http://127.0.0.1:9090/search_listings" \
+  --data-urlencode "location=amsterdam" \
+  --data-urlencode "offering_type=buy" \
+  --data-urlencode "availability=available,sold" \
+  --data-urlencode "object_type=house,apartment" \
+  --data-urlencode "energy_label=A,B,C" \
+  --data-urlencode "pages=0,1,2"
+```
+
 ## Supported Search Parameters
 
 See pyfunda reference for exact semantics.

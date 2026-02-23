@@ -71,6 +71,14 @@ class TestFundaGateway(unittest.TestCase):
         self.assertEqual(self.module._as_list_param(None), [])
         self.assertEqual(self.module._as_list_param([1, None, "A"]), ["1", "A"])
 
+    def test_optional_converters_return_none_for_blank_values(self):
+        self.assertIsNone(self.module._as_optional_int(""))
+        self.assertIsNone(self.module._as_optional_int(None))
+        self.assertEqual(self.module._as_optional_int("5"), 5)
+        self.assertIsNone(self.module._as_optional_str(""))
+        self.assertIsNone(self.module._as_optional_str("   "))
+        self.assertEqual(self.module._as_optional_str(" newest "), "newest")
+
     def test_parse_args_uses_defaults(self):
         with mock.patch.object(sys, "argv", ["funda_gateway.py"]):
             args = self.module.parse_args()
@@ -242,6 +250,124 @@ class TestFundaGateway(unittest.TestCase):
             sorted(response.keys()),
             ["01111111", "11111111", "21111111"],
         )
+
+    def test_search_listings_passes_availability_list(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.last_kwargs = None
+
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                self.last_kwargs = kwargs
+                return []
+
+        funda_instance = {}
+
+        def fake_funda_factory(timeout):
+            instance = FakeFunda(timeout)
+            funda_instance["value"] = instance
+            return instance
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        routes["/search_listings"](
+            location="Amsterdam",
+            offering_type="buy",
+            availability="available,sold",
+            pages="0",
+        )
+
+        self.assertEqual(
+            funda_instance["value"].last_kwargs["availability"],
+            ["available", "sold"],
+        )
+
+    def test_search_listings_passes_none_for_omitted_optional_filters(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.last_kwargs = None
+
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                self.last_kwargs = kwargs
+                return []
+
+        funda_instance = {}
+
+        def fake_funda_factory(timeout):
+            instance = FakeFunda(timeout)
+            funda_instance["value"] = instance
+            return instance
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        routes["/search_listings"](
+            location="Amsterdam",
+            offering_type="",
+            radius_km="",
+            price_min="",
+            price_max="",
+            area_min="",
+            area_max="",
+            plot_min="",
+            plot_max="",
+            object_type="",
+            energy_label="",
+            sort="",
+            pages="0",
+        )
+
+        self.assertEqual(funda_instance["value"].last_kwargs["offering_type"], "buy")
+        self.assertIsNone(funda_instance["value"].last_kwargs["availability"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["radius_km"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["price_min"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["price_max"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["area_min"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["area_max"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["plot_min"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["plot_max"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["object_type"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["energy_label"])
+        self.assertIsNone(funda_instance["value"].last_kwargs["sort"])
+        self.assertEqual(funda_instance["value"].last_kwargs["page"], 0)
 
     def test_spin_up_server_price_history_is_keyed_by_date(self):
         routes = {}
