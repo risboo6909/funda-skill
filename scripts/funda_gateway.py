@@ -1,10 +1,13 @@
 import argparse
 import socket
+import time
 
 from simple_http_server import PathValue, route, server
 from simple_http_server.basic_models import Parameter
 
 from funda import Funda
+
+MULTI_PAGE_REQUEST_DELAY_SECONDS = 0.3
 
 
 def parse_args():
@@ -117,7 +120,7 @@ def spin_up_server(server_port, funda_timeout):
 
         response = {}
 
-        for page in pages:
+        for index, page in enumerate(pages):
             search_kwargs = {
                 "location": location,
                 "offering_type": offering_type,
@@ -142,6 +145,8 @@ def spin_up_server(server_port, funda_timeout):
                     for item in results
                 }
             )
+            if index < len(pages) - 1:
+                time.sleep(MULTI_PAGE_REQUEST_DELAY_SECONDS)
 
         return response
 

@@ -229,22 +229,27 @@ class TestFundaGateway(unittest.TestCase):
         ):
             self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
-        response = routes["/search_listings"](
-            location="Amsterdam",
-            offering_type="buy",
-            radius_km="5",
-            price_min="0",
-            price_max="500000",
-            area_min="40",
-            area_max="100",
-            plot_min="100",
-            plot_max="150",
-            object_type="house",
-            energy_label="A",
-            sort="newest",
-            pages="0,1,2",
-        )
+        with mock.patch.object(self.module.time, "sleep") as mock_sleep:
+            response = routes["/search_listings"](
+                location="Amsterdam",
+                offering_type="buy",
+                radius_km="5",
+                price_min="0",
+                price_max="500000",
+                area_min="40",
+                area_max="100",
+                plot_min="100",
+                plot_max="150",
+                object_type="house",
+                energy_label="A",
+                sort="newest",
+                pages="0,1,2",
+            )
 
+            self.assertEqual(mock_sleep.call_count, 2)
+            mock_sleep.assert_called_with(
+                self.module.MULTI_PAGE_REQUEST_DELAY_SECONDS
+            )
         self.assertEqual(funda_instance["value"].calls, [0, 1, 2])
         self.assertEqual(
             sorted(response.keys()),
