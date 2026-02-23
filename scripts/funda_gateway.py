@@ -101,12 +101,16 @@ def spin_up_server(server_port, funda_timeout):
         object_type=Parameter("object_type", default=""),  # Property types
         energy_label=Parameter("energy_label", default=""),  # Energy labels
         sort=Parameter("sort", default="newest"),  # Sort order
+        page=Parameter("page", default=""),  # Backward-compatible single page alias
         pages=Parameter("pages", default="0"),  # Page numbers (15 results per page)
     ):
         object_type = _as_list_param(object_type) or None
         energy_label = _as_list_param(energy_label) or None
         availability = _as_list_param(availability) or None
-        pages = _as_list_param(pages) or ["0"]
+        pages = _as_list_param(pages)
+        if not pages:
+            single_page = _as_optional_int(page)
+            pages = [str(single_page)] if single_page is not None else ["0"]
         pages = list(map(int, pages))
         offering_type = _as_optional_str(offering_type) or "buy"
         sort = _as_optional_str(sort)

@@ -151,11 +151,13 @@ GET or POST /search_listings
 ```
 
 **Multi-page support**
-- Use `pages` (instead of `page`) to request one or multiple result pages.
+- Prefer `pages` to request one or multiple result pages.
+- `page` is also accepted as a backward-compatible alias for a single page.
 - `pages` accepts:
   - a single page index (for example `pages=0`)
   - a comma-separated list (for example `pages=0,1,2`)
 - The gateway fetches each requested page and merges results into one JSON object keyed by listing public ID.
+- If both `page` and `pages` are provided, `pages` takes precedence.
 
 **Parameter normalization behavior (important)**
 - `object_type`, `energy_label`, and `availability` accept:
@@ -176,7 +178,8 @@ GET or POST /search_listings
 - `object_type`
 - `energy_label`
 - `sort`
-- `pages` (gateway-only convenience; internally mapped to multiple `page` calls)
+- `page` (backward-compatible single-page alias)
+- `pages` (gateway convenience; internally mapped to multiple `page` calls)
 
 **Examples**
 ```bash
