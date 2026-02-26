@@ -5,10 +5,8 @@ Short operating guide for agents managing the local Funda gateway.
 ## Rules
 
 - Default bind: `127.0.0.1` (loopback)
-- Ask the user which interface to use on first startup (`127.0.0.1` or `0.0.0.0`)
-- If user does not specify, use `127.0.0.1`
+- Start gateway on `127.0.0.1` only
 - For periodic tasks in OpenClaw / ClawHub, use **Heartbeat** (not cron)
-- Do not rely on `0.0.0.0` for ClawHub cron jobs (cron may run in isolated environment)
 - Reuse a healthy running gateway; do not restart on every request
 - Restart only after skill update or when unhealthy
 - Do not expose the gateway publicly (no auth / no rate limiting)
@@ -51,21 +49,15 @@ source .venv/bin/activate
 
 ## 3. Start Gateway
 
-Default (recommended):
+Run from the Funda skill local folder:
 
 ```bash
-python scripts/funda_gateway.py --host 127.0.0.1 --port 9090 --timeout 10
-```
-
-Only if user explicitly wants non-loopback binding:
-
-```bash
-python scripts/funda_gateway.py --host 0.0.0.0 --port 9090 --timeout 10
+python scripts/funda_gateway.py --port 9090 --timeout 10
 ```
 
 Notes:
-- Startup stops if the selected `host:port` is already occupied by the gateway
-- `127.0.0.1` remains preferred for normal agent usage
+- Gateway binds to `127.0.0.1` only
+- Startup stops if `127.0.0.1:9090` is already occupied by the gateway
 
 ## 4. Health Check After Start
 

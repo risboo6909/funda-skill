@@ -1,6 +1,10 @@
 import argparse
+import base64
+import io
 import socket
 import time
+import urllib.error
+import urllib.request
 
 from simple_http_server import PathValue, route, server
 from simple_http_server.basic_models import Parameter
@@ -12,9 +16,6 @@ MULTI_PAGE_REQUEST_DELAY_SECONDS = 0.3
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Funda Gateway")
-    parser.add_argument(
-        "--host", type=str, default="127.0.0.1", help="Host to run the server on"
-    )
     parser.add_argument(
         "--port", type=int, default=9090, help="Port to run the server on"
     )
@@ -71,26 +72,112 @@ def _as_optional_str(value):
     return text or None
 
 
-def is_port_listening(host, port, timeout=0.5):
+def _build_preview_base64(image_bytes, max_size=320, quality=65):
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError(
+            "Pillow is required for preview generation. Install package 'Pillow'."
+        ) from exc
+
+    with Image.open(io.BytesIO(image_bytes)) as img:
+        img = img.convert("RGB")
+        img.thumbnail((max_size, max_size))
+        output = io.BytesIO()
+        img.save(output, format="JPEG", optimize=True, quality=quality)
+        preview_bytes = output.getvalue()
+
+    return "image/jpeg", base64.b64encode(preview_bytes).decode("ascii")
+
+
+def is_port_listening(port, host="127.0.0.1", timeout=0.5):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
         return sock.connect_ex((host, int(port))) == 0
 
 
-def spin_up_server(server_host, server_port, funda_timeout):
-    if is_port_listening(server_host, server_port):
-        raise RuntimeError(f"Gateway already running on {server_host}:{server_port}")
+def spin_up_server(server_port, funda_timeout):
+    if is_port_listening(server_port):
+        raise RuntimeError(f"Gateway already running on 127.0.0.1:{server_port}")
 
     f = Funda(timeout=funda_timeout)
 
-    @route("/get_listing/{path_part}", method=["GET"])
-    def get_listing(path_part=PathValue()):
-        return f.get_listing(path_part).to_dict()
+    @route("/get_listing/{id}", method=["GET"])
+    def get_listing(id=PathValue()):
+        return f.get_listing(id).to_dict()
 
-    @route("/get_price_history/{path_part}", method=["GET"])
-    def get_price_history(path_part=PathValue()):
-        listing = f.get_listing(path_part)
+    @route("/get_price_history/{id}", method=["GET"])
+    def get_price_history(id=PathValue()):
+        listing = f.get_listing(id)
         return {item["date"]: item for item in f.get_price_history(listing)}
+
+    @route("/get_previews/{id}", method=["GET"])
+    def get_previews(
+        id=PathValue(),
+        limit=Parameter("limit", default="5"),  # Maximum number of previews to return
+        preview_size=Parameter("preview_size", default="320"),  # Max preview side in px
+        preview_quality=Parameter("preview_quality", default="65"),  # JPEG quality
+        ids=Parameter("ids", default=""),
+    ):  # Comma-separated photo IDs (like 224/802/529). If omitted, take first N photos.
+        listing = f.get_listing(id)
+        photo_urls = sorted(listing.get("photo_urls") or [])
+        if not photo_urls:
+            return {"id": id, "count": 0, "previews": []}
+
+        photo_ids_to_urls = {
+            "/".join(url.split("/")[-3:]).split(".")[0]: url for url in photo_urls
+        }
+
+        ids = _as_list_param(ids)
+
+        max_items = _as_optional_int(limit) or 5
+        max_items = max(1, min(max_items, 50))
+        max_size = _as_optional_int(preview_size) or 320
+        max_size = max(64, min(max_size, 1024))
+        quality = _as_optional_int(preview_quality) or 65
+        quality = max(30, min(quality, 90))
+
+        if ids:
+            urls_to_download = [
+                photo_ids_to_urls[photo_id]
+                for photo_id in ids
+                if photo_id in photo_ids_to_urls
+            ]
+        else:
+            urls_to_download = photo_urls
+
+        urls_to_download = urls_to_download[:max_items]
+        previews = []
+
+        for url in urls_to_download:
+            photo_id = "/".join(url.split("/")[-3:]).split(".")[0]
+            try:
+                request = urllib.request.Request(
+                    url, headers={"User-Agent": "Mozilla/5.0"}
+                )
+                with urllib.request.urlopen(request, timeout=funda_timeout) as response:
+                    content = response.read()
+                content_type, encoded = _build_preview_base64(
+                    content, max_size=max_size, quality=quality
+                )
+                previews.append(
+                    {
+                        "id": photo_id,
+                        "url": url,
+                        "content_type": content_type,
+                        "base64": encoded,
+                    }
+                )
+            except urllib.error.URLError as exc:
+                previews.append(
+                    {
+                        "id": photo_id,
+                        "url": url,
+                        "error": str(exc),
+                    }
+                )
+
+        return {"id": id, "count": len(previews), "previews": previews}
 
     @route("/search_listings", method=["GET", "POST"])
     def search_listings(
@@ -155,9 +242,9 @@ def spin_up_server(server_host, server_port, funda_timeout):
 
         return response
 
-    server.start(host=server_host, port=server_port)
+    server.start(host="127.0.0.1", port=server_port)
 
 
 if __name__ == "__main__":
     args = parse_args()
-    spin_up_server(args.host, args.port, args.timeout)
+    spin_up_server(args.port, args.timeout)

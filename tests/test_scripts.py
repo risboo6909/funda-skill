@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import types
 import unittest
+import base64
 from pathlib import Path
 from unittest import mock
 
@@ -100,7 +101,7 @@ class TestFundaGateway(unittest.TestCase):
             self.module, "Funda"
         ) as mock_funda:
             with self.assertRaises(RuntimeError):
-                self.module.spin_up_server(server_host="127.0.0.1", server_port=9090, funda_timeout=10)
+                self.module.spin_up_server(server_port=9090, funda_timeout=10)
 
         mock_funda.assert_not_called()
 
@@ -155,7 +156,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         response = routes["/search_listings"](
             location="Amsterdam",
@@ -227,7 +228,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         with mock.patch.object(self.module.time, "sleep") as mock_sleep:
             response = routes["/search_listings"](
@@ -292,7 +293,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         routes["/search_listings"](
             location="Amsterdam",
@@ -339,7 +340,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         routes["/search_listings"](
             location="Amsterdam",
@@ -389,7 +390,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
         routes["/search_listings"](
             location="Amsterdam",
@@ -421,6 +422,84 @@ class TestFundaGateway(unittest.TestCase):
         self.assertIsNone(funda_instance["value"].last_kwargs["energy_label"])
         self.assertIsNone(funda_instance["value"].last_kwargs["sort"])
         self.assertEqual(funda_instance["value"].last_kwargs["page"], 0)
+
+    def test_get_previews_returns_base64_previews(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeListing(dict):
+            pass
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                return FakeListing(
+                    photo_urls=[
+                        "https://cloud.funda.nl/valentina_media/224/802/529.jpg",
+                        "https://cloud.funda.nl/valentina_media/224/802/532.jpg",
+                    ]
+                )
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        class FakeHTTPResponse:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def read(self):
+                return self._payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return False
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        with mock.patch.object(
+            self.module.urllib.request,
+            "urlopen",
+            return_value=FakeHTTPResponse(b"thumb-bytes"),
+        ), mock.patch.object(
+            self.module,
+            "_build_preview_base64",
+            return_value=("image/jpeg", base64.b64encode(b"tiny").decode("ascii")),
+        ) as mock_build_preview:
+            response = routes["/get_previews/{id}"](
+                id="43242669",
+                limit="1",
+                preview_size="256",
+                preview_quality="60",
+                ids="224/802/529",
+            )
+
+        self.assertEqual(response["count"], 1)
+        self.assertEqual(response["previews"][0]["id"], "224/802/529")
+        self.assertEqual(response["previews"][0]["content_type"], "image/jpeg")
+        self.assertEqual(response["previews"][0]["base64"], base64.b64encode(b"tiny").decode("ascii"))
+        mock_build_preview.assert_called_once_with(
+            b"thumb-bytes",
+            max_size=256,
+            quality=60,
+        )
 
     def test_spin_up_server_price_history_is_keyed_by_date(self):
         routes = {}
@@ -465,9 +544,9 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
 
-        response = routes["/get_price_history/{path_part}"](path_part="43242669")
+        response = routes["/get_price_history/{id}"](id="43242669")
 
         self.assertEqual(funda_instance["value"].path_part, "43242669")
         self.assertEqual(

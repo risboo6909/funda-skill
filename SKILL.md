@@ -143,7 +143,42 @@ GET /get_price_history/{public_id}
 **Description**
 Returns historical price changes for a listing.
 
-### 3. Search Listings
+### 3. Get Previews
+
+**Endpoint**
+```
+GET /get_previews/{public_id}
+```
+
+**Description**
+Downloads listing photos and returns compact JPEG previews as base64 payloads.
+
+This endpoint is intended for AI/agent workflows where full-size images are too large for routine processing.
+
+**Query Parameters**
+- `limit` (default: `5`) — max number of previews to return
+- `preview_size` (default: `320`) — max width/height in pixels
+- `preview_quality` (default: `65`) — JPEG quality for compressed previews
+- `ids` (optional) — comma-separated photo IDs (`224/802/529,224/802/532`)
+
+**Response**
+- `id`: listing public ID
+- `count`: number of previews returned
+- `previews`: list of objects with:
+  - `id`
+  - `url`
+  - `content_type` (currently `image/jpeg`)
+  - `base64` (resized preview bytes)
+
+**Example**
+```bash
+curl -sG "http://127.0.0.1:9090/get_previews/43243137" \
+  --data-urlencode "limit=3" \
+  --data-urlencode "preview_size=256" \
+  --data-urlencode "preview_quality=60"
+```
+
+### 4. Search Listings
 
 **Endpoint**
 ```
