@@ -36,11 +36,17 @@ On first run, the agent needs to:
 
 Security note: the gateway has no authentication or rate limiting. It should only be used in trusted local environments and should be started on loopback (`127.0.0.1`).
 
-For periodic tasks / scheduled checks in OpenClaw / ClawHub, prefer **Heartbeat** instead of cron jobs.
+For regular updates / scheduled checks in OpenClaw / ClawHub, use **Heartbeat** instead of cron jobs.
 
-Why:
-- Heartbeat runs in the main session, so it can use the same local gateway session context
-- Cron jobs may run in an isolated environment, so binding the gateway to `0.0.0.0` will not help in that case
+Why Heartbeat is the better choice here:
+- this skill depends on a local HTTP gateway process running in the same working session
+- **Heartbeat** runs in the main session, so it can reuse that local gateway
+- **cron jobs** may run in an isolated environment and may not be able to reach your gateway at all
+- even changing the gateway bind address (for example to `0.0.0.0`) may not fix cron isolation
+
+In practice:
+- use **Heartbeat** for periodic notifications / monitoring
+- use cron only if you fully understand your runtime/network isolation and do not depend on the local gateway session
 
 OpenClaw Heartbeat docs:
 - https://docs.openclaw.ai/gateway/heartbeat
