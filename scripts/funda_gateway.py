@@ -13,6 +13,9 @@ MULTI_PAGE_REQUEST_DELAY_SECONDS = 0.3
 def parse_args():
     parser = argparse.ArgumentParser(description="Funda Gateway")
     parser.add_argument(
+        "--host", type=str, default="127.0.0.1", help="Host to run the server on"
+    )
+    parser.add_argument(
         "--port", type=int, default=9090, help="Port to run the server on"
     )
     parser.add_argument(
@@ -68,15 +71,15 @@ def _as_optional_str(value):
     return text or None
 
 
-def is_port_listening(port, host="127.0.0.1", timeout=0.5):
+def is_port_listening(host, port, timeout=0.5):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
         return sock.connect_ex((host, int(port))) == 0
 
 
-def spin_up_server(server_port, funda_timeout):
-    if is_port_listening(server_port):
-        raise RuntimeError(f"Gateway already running on 127.0.0.1:{server_port}")
+def spin_up_server(server_host, server_port, funda_timeout):
+    if is_port_listening(server_host, server_port):
+        raise RuntimeError(f"Gateway already running on {server_host}:{server_port}")
 
     f = Funda(timeout=funda_timeout)
 
@@ -93,7 +96,9 @@ def spin_up_server(server_port, funda_timeout):
     def search_listings(
         location=Parameter("location", default="Amsterdam"),  # City or area name
         offering_type=Parameter("offering_type", default=""),  # "buy" or "rent"
-        availability=Parameter("availability", default=""),  # available/negotiations/sold
+        availability=Parameter(
+            "availability", default=""
+        ),  # available/negotiations/sold
         radius_km=Parameter("radius_km", default=""),  # Search radius in kilometers
         price_min=Parameter("price_min", default=""),  # Minimum price
         price_max=Parameter("price_max", default=""),  # Maximum price
@@ -150,9 +155,9 @@ def spin_up_server(server_port, funda_timeout):
 
         return response
 
-    server.start(host="127.0.0.1", port=server_port)
+    server.start(host=server_host, port=server_port)
 
 
 if __name__ == "__main__":
     args = parse_args()
-    spin_up_server(args.port, args.timeout)
+    spin_up_server(args.host, args.port, args.timeout)
