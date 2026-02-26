@@ -100,7 +100,7 @@ class TestFundaGateway(unittest.TestCase):
             self.module, "Funda"
         ) as mock_funda:
             with self.assertRaises(RuntimeError):
-                self.module.spin_up_server(server_port=9090, funda_timeout=10)
+                self.module.spin_up_server(server_host="127.0.0.1", server_port=9090, funda_timeout=10)
 
         mock_funda.assert_not_called()
 
@@ -155,7 +155,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
 
         response = routes["/search_listings"](
             location="Amsterdam",
@@ -227,7 +227,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
 
         with mock.patch.object(self.module.time, "sleep") as mock_sleep:
             response = routes["/search_listings"](
@@ -292,7 +292,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
 
         routes["/search_listings"](
             location="Amsterdam",
@@ -339,7 +339,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
 
         routes["/search_listings"](
             location="Amsterdam",
@@ -389,7 +389,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
 
         routes["/search_listings"](
             location="Amsterdam",
@@ -465,7 +465,7 @@ class TestFundaGateway(unittest.TestCase):
         ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
             self.module, "is_port_listening", return_value=False
         ):
-            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+            self.module.spin_up_server(server_host="127.0.0.1", server_port=9001, funda_timeout=7)
 
         response = routes["/get_price_history/{path_part}"](path_part="43242669")
 
