@@ -34,17 +34,16 @@ On first run, the agent needs to:
 - install PyFunda and its Python dependencies
 - start a local HTTP gateway
 
-Security note: the gateway has no authentication or rate limiting. It should only be used in trusted local environments and binds to loopback (`127.0.0.1`) by default.
+Security note: the gateway has no authentication or rate limiting. It should only be used in trusted local environments and should be started on loopback (`127.0.0.1`).
 
-By default the gateway should be started on `127.0.0.1` (loopback) for safety.
+For periodic tasks / scheduled checks in OpenClaw / ClawHub, prefer **Heartbeat** instead of cron jobs.
 
-If you want **ClawHub cron jobs** to access the gateway and send scheduled updates, start the server on `0.0.0.0` instead:
+Why:
+- Heartbeat runs in the main session, so it can use the same local gateway session context
+- Cron jobs may run in an isolated environment, so binding the gateway to `0.0.0.0` will not help in that case
 
-```bash
-python scripts/funda_gateway.py --host 0.0.0.0 --port 9090 --timeout 10
-```
-
-Reason: in ClawHub, cron jobs may run in an isolated environment, so they may not be able to reach a service bound only to loopback.
+OpenClaw Heartbeat docs:
+- https://docs.openclaw.ai/gateway/heartbeat
 
 Once the gateway (`funda_gateway.py`) is installed and running, subsequent requests should be much faster.
 
