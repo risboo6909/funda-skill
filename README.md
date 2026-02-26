@@ -34,7 +34,17 @@ On first run, the agent needs to:
 - install PyFunda and its Python dependencies
 - start a local HTTP gateway
 
-Security note: the gateway has no authentication or rate limiting. It should only be used in trusted local environments and binds only to loopback (`127.0.0.1`).
+Security note: the gateway has no authentication or rate limiting. It should only be used in trusted local environments and binds to loopback (`127.0.0.1`) by default.
+
+By default the gateway should be started on `127.0.0.1` (loopback) for safety.
+
+If you want **ClawHub cron jobs** to access the gateway and send scheduled updates, start the server on `0.0.0.0` instead:
+
+```bash
+python scripts/funda_gateway.py --host 0.0.0.0 --port 9090 --timeout 10
+```
+
+Reason: in ClawHub, cron jobs may run in an isolated environment, so they may not be able to reach a service bound only to loopback.
 
 Once the gateway (`funda_gateway.py`) is installed and running, subsequent requests should be much faster.
 
