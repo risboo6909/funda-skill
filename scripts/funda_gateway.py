@@ -37,7 +37,7 @@ def fetch_public_id(url):
         raise ValueError(f"Invalid Funda listing URL: {url}")
 
 
-def _as_list_param(value):
+def _as_list_param(value, lowercase=True):
     if isinstance(value, list):
         items = value
     elif value is None:
@@ -48,9 +48,13 @@ def _as_list_param(value):
     result = []
     for item in items:
         if isinstance(item, str):
-            result.extend(
-                part.strip().lower() for part in item.split(",") if part.strip()
-            )
+            for part in item.split(","):
+                text = part.strip()
+                if not text:
+                    continue
+                if lowercase:
+                    text = text.lower()
+                result.append(text)
         elif item is not None:
             result.append(str(item))
     return result
@@ -258,7 +262,8 @@ def spin_up_server(server_port, funda_timeout):
     ):
         location = _as_optional_str(location) or "amsterdam"
         object_type = _as_list_param(object_type) or None
-        energy_label = _as_list_param(energy_label) or None
+        energy_label = _as_list_param(energy_label, lowercase=False)
+        energy_label = [item.upper() for item in energy_label] or None
         availability = _as_list_param(availability) or None
         pages = _as_list_param(pages)
         if not pages:

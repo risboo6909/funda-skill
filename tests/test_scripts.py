@@ -359,6 +359,56 @@ class TestFundaGateway(unittest.TestCase):
             ["available", "sold"],
         )
 
+    def test_search_listings_normalizes_energy_label_to_uppercase(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.last_kwargs = None
+
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                self.last_kwargs = kwargs
+                return []
+
+        funda_instance = {}
+
+        def fake_funda_factory(timeout):
+            instance = FakeFunda(timeout)
+            funda_instance["value"] = instance
+            return instance
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", fake_funda_factory), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        routes["/search_listings"](
+            location="Amsterdam",
+            offering_type="buy",
+            energy_label="a,a+,b",
+            pages="0",
+        )
+
+        self.assertEqual(
+            funda_instance["value"].last_kwargs["energy_label"],
+            ["A", "A+", "B"],
+        )
+
     def test_search_listings_passes_none_for_omitted_optional_filters(self):
         routes = {}
 

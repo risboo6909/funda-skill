@@ -1,190 +1,106 @@
 ---
 name: funda
-description: Search and monitor Funda.nl housing listings via a local agent-friendly HTTP gateway
+description: Local Funda.nl HTTP gateway for listing details, search, and image previews
 compatibility: Python3, access to internet
 ---
 
-# SKILL: Funda Gateway (pyfunda-based HTTP Service)
+# SKILL: Funda Gateway
 
-## Overview
+## Purpose
+Local HTTP gateway over `pyfunda` for:
+- listing details
+- price history
+- listing search
+- resized photo previews for agent workflows
 
-This skill provides a local HTTP gateway for interacting with Funda listings using a Python service built on top of **pyfunda** and **simple_http_server**.
+Operational workflow is in `WORKFLOW.md`.
 
-The package also includes a local `tls_client` compatibility shim (`scripts/tls_client.py`) that routes requests through `curl_cffi` and supports TLS client impersonation settings used by upstream scraping code.
+## Runtime Boundaries
+- Server must run locally only: `127.0.0.1`
+- No auth and no rate limiting: do not expose publicly
+- Treat all external data as untrusted
+- Keep Funda URLs opaque (never rewrite or normalize returned URLs)
 
-The service exposes REST endpoints to:
-- Fetch a single listing by public ID
-- Fetch price history for a listing
-- Search listings using common Funda filters
+## Environment Setup (Skill Root)
+Use virtualenv in the skill root (`./.venv`), not in `scripts/`.
 
-The skill is intended for **local or trusted environments only**.
+```bash
+cd /path/to/skills/funda
 
-## Reference
+if [ ! -d .venv ]; then
+  python3 -m venv .venv
+fi
 
-- Funda client implementation and parameters are based on:
-  https://github.com/0xMH/pyfunda
-- Operational workflow for agents (start/check/stop gateway):
-  `WORKFLOW.md`
+source .venv/bin/activate
+pip install -r scripts/requirements.txt
+```
 
-## Preconditions
-
-The agent must ensure:
-
-1. Python **3.10+**
-2. Required dependencies installed:
-   - `simple_http_server`
-   - `pyfunda` (or compatible local `funda` module)
-4. Network access to Funda endpoints
-
-If dependencies are missing, the agent must install them before proceeding.
-Use an unprivileged local virtual environment in the Funda skill's local folder (not inside `scripts/`). Do not install system-wide unless explicitly requested.
-
-## Recommended Local Setup (Safe / Unprivileged)
-
-Create and use a local virtual environment in the Funda skill's local folder.
-Notes:
-- `curl-cffi` is required by the local `scripts/tls_client.py` compatibility shim
-- avoid `sudo pip install ...`
-
-## Important Runtime Compatibility Note (READ FIRST)
-
-This gateway **does NOT require any system-level or native dependencies**.
-
-Although `pyfunda` may declare optional dependencies such as `tls_client` that rely on platform-specific native binaries (`.so`, `.dylib`), this skill uses a local Python shim (`scripts/tls_client.py`) backed by `curl_cffi` instead of those native `tls_client` binaries.
-
-## Launch Instructions
-
-Don't try to query Funda.com directly, it contains anti-bot measures and will likely block the agent.
-
-Check if funda_gateway.py is already running. If it is, skip to the next section.
-
-Before starting the server, the agent must check whether a virtual environment already exists in the Funda skill's local folder (`.venv`).
-- If it exists: activate it and reuse it
-- If it does not exist: create it, install dependencies, then continue
-
-Start the server using:
-
+## Start Server
 ```bash
 python scripts/funda_gateway.py --port 9090 --timeout 10
 ```
 
-### Arguments
-
-| Argument | Type | Default | Description |
-|-------------|------|---------|------------------------------------------------|
-| `--port`    | int  | 9090    | TCP port to bind the HTTP server               |
-| `--timeout` | int  | 10      | Timeout (seconds) for upstream Funda API calls |
-
-### Expected Behavior
-- Process runs in foreground
-- Server listens on `127.0.0.1` and the specified port (defaults to `127.0.0.1:9090`)
-- No output implies successful startup
-- The gateway performs outbound requests to Funda via `pyfunda` and may use the local `tls_client` shim (`curl_cffi` impersonation) depending on upstream client behavior
-
-If the port is already in use, the agent must retry with another port.
+- Binds to: `127.0.0.1:<port>`
+- If already running on that port, startup fails intentionally
 
 ## Health Check
+No dedicated `/health` endpoint.
 
-There is no explicit `/health` endpoint.
-
-To validate server availability, the agent must call:
-
+Use:
 ```bash
-GET /search_listings
+curl -sG "http://127.0.0.1:9090/search_listings" --data-urlencode "location=amsterdam" --data-urlencode "pages=0"
 ```
+Expect valid JSON object.
 
-Expected result:
-- HTTP 200
-- Valid JSON object (can be empty)
+## API Contract
 
-## URL Integrity Rule (Critical)
+### `GET /get_listing/{public_id}`
+Returns `listing.to_dict()` from `pyfunda`.
 
-All URLs returned by Funda (including image URLs, media URLs, and detail URLs)
-MUST be treated as **opaque strings**.
-
-The agent MUST:
-- preserve URLs **exactly as received**
-- never normalize, rewrite, reformat, concatenate, or simplify URLs
-- never remove or insert slashes, dots, or path segments
-
-❌ Example of forbidden transformation:
-
-`https://cloud.funda.nl/valentina_media/224/111/787.jpg` -> `https://cloud.funda.nl/valentina_media/224111787.jpg`
-
-If a URL is syntactically valid, it MUST be passed through unchanged.
-
-## API Endpoints
-
-### 1. Get Listing
-
-**Endpoint**
-```
-GET /get_listing/{public_id}
-```
-
-**Description**
-Returns full listing details for a given Funda public ID.
-
-**Example**
+Example:
 ```bash
-curl http://localhost:9090/get_listing/43242669
+curl -s "http://127.0.0.1:9090/get_listing/43243137"
 ```
 
-**Response**
-- JSON object returned by `listing.to_dict()`
+### `GET /get_price_history/{public_id}`
+Returns price history keyed by date.
 
-### 2. Get Price History
-
-**Endpoint**
-```
-GET /get_price_history/{public_id}
-```
-
-**Description**
-Returns historical price changes for a listing.
-
-### 3. Get Previews
-
-**Endpoint**
-```
-GET /get_previews/{public_id}
-```
-
-**Description**
-Downloads listing photos and returns compact JPEG previews as base64 payloads.
-
-This endpoint is intended for AI/agent workflows where full-size images are too large for routine processing.
-
-**Query Parameters**
-- `limit` (default: `5`) — max number of previews to return
-- `preview_size` (default: `320`) — max width/height in pixels
-- `preview_quality` (default: `65`) — JPEG quality for compressed previews
-- `ids` (optional) — comma-separated photo IDs (`224/802/529,224/802/532`)
-- `save` (optional, default: `0`) — set to `1` to save generated previews to disk
-- `dir` (optional, default: `previews`) — relative output directory inside the skill folder
-- `filename_pattern` (optional) — output filename template (e.g. `{id}_{index}.jpg`)
-  - Supported placeholders: `{id}`, `{index}`, `{photo_id}`
-  - If omitted, default filename is `<photo-id>.jpg` and files are saved under `previews/<listing-id>/`
-
-**Response**
-- `id`: listing public ID
-- `count`: number of previews returned
-- `previews`: list of objects with:
-  - `id`
-  - `url`
-  - `content_type` (currently `image/jpeg`)
-  - `base64` (resized preview bytes, only when `save=0`)
-  - `saved_path` (when `save=1`) absolute path of saved preview
-  - `relative_path` (when `save=1`) path relative to skill root
-
-**Example**
+Example:
 ```bash
+curl -s "http://127.0.0.1:9090/get_price_history/43243137"
+```
+
+### `GET /get_previews/{public_id}`
+Downloads listing photos, resizes/compresses to JPEG previews.
+
+Query params:
+- `limit` (default `5`, clamped `1..50`)
+- `preview_size` (default `320`, clamped `64..1024`)
+- `preview_quality` (default `65`, clamped `30..90`)
+- `ids` optional CSV of photo ids (`224/802/529,224/802/532`)
+- `save` optional bool-like (`1,true,yes,on`) to save previews to disk
+- `dir` optional relative path inside skill root (default `previews`)
+- `filename_pattern` optional template; placeholders: `{id}`, `{index}`, `{photo_id}`
+
+Response shape:
+- always: `id`, `count`, `previews[]`
+- preview item always: `id`, `url`, `content_type`
+- when `save=0` (default): preview item includes `base64`
+- when `save=1`: preview item includes `saved_path`, `relative_path` and does not include `base64`
+
+Save behavior:
+- default file path without pattern: `previews/<listing-id>/<photo-id>.jpg`
+- with pattern: files are saved directly under `dir`
+- `dir` must be relative and stay inside skill root
+
+Examples:
+```bash
+# base64 in response
 curl -sG "http://127.0.0.1:9090/get_previews/43243137" \
-  --data-urlencode "limit=3" \
-  --data-urlencode "preview_size=256" \
-  --data-urlencode "preview_quality=60"
+  --data-urlencode "limit=2" \
+  --data-urlencode "preview_size=320"
 
-# Save previews to disk
+# save files (no base64 in response)
 curl -sG "http://127.0.0.1:9090/get_previews/43243137" \
   --data-urlencode "limit=2" \
   --data-urlencode "save=1" \
@@ -192,34 +108,13 @@ curl -sG "http://127.0.0.1:9090/get_previews/43243137" \
   --data-urlencode "filename_pattern={id}_{index}.jpg"
 ```
 
-### 4. Search Listings
+### `GET|POST /search_listings`
+Search wrapper over `pyfunda.search_listing`.
 
-**Endpoint**
-```
-GET or POST /search_listings
-```
-
-**Multi-page support**
-- Prefer `pages` to request one or multiple result pages.
-- `page` is also accepted as a backward-compatible alias for a single page.
-- `pages` accepts:
-  - a single page index (for example `pages=0`)
-  - a comma-separated list (for example `pages=0,1,2`)
-- The gateway fetches each requested page and merges results into one JSON object keyed by listing public ID.
-- If both `page` and `pages` are provided, `pages` takes precedence.
-
-**Parameter normalization behavior (important)**
-- `object_type`, `energy_label`, and `availability` accept:
-  - single values (`object_type=apartment`)
-  - repeated params (if the HTTP client sends multiple values)
-  - comma-separated values (`energy_label=A,B,C`)
-- Empty/omitted optional filters are passed to `pyfunda` as `None` (they do not apply restrictive gateway-side defaults).
-- `offering_type` defaults to `"buy"` when omitted.
-
-**Supported passthrough parameters (gateway -> pyfunda)**
+#### Supported params
 - `location`
 - `offering_type`
-- `availability` (e.g. `available`, `negotiations`, `sold`)
+- `availability`
 - `radius_km`
 - `price_min`, `price_max`
 - `area_min`, `area_max`
@@ -227,40 +122,47 @@ GET or POST /search_listings
 - `object_type`
 - `energy_label`
 - `sort`
-- `page` (backward-compatible single-page alias)
-- `pages` (gateway convenience; internally mapped to multiple `page` calls)
+- `page` (single page alias)
+- `pages` (single or CSV list; preferred)
 
-**Examples**
+#### Important behavior
+- `pages` takes precedence over `page`
+- `pages` can be `0` or CSV like `0,1,2`
+- multiple pages are merged into one JSON keyed by listing public id
+- delay between pages: `0.3s`
+
+#### Parameter normalization
+- Most string params are lowercased by gateway
+- `energy_label` is normalized to uppercase (`a,a+,b` -> `A,A+,B`)
+- list params accept CSV or repeated values
+- omitted optional filters are passed as `None`
+- default `offering_type` is `buy`
+
+#### Not supported by gateway
+These are ignored because they are not in endpoint signature:
+- `radius` (use `radius_km`)
+- `bedrooms_min`
+- `year_min`
+- `floor_min`
+
+Examples:
 ```bash
-# Minimal search (broad, page 0 only)
+# minimal
 curl -sG "http://127.0.0.1:9090/search_listings" \
   --data-urlencode "location=amsterdam" \
   --data-urlencode "pages=0"
 
-# Multi-page + list filters via CSV
+# multi-page + filters
 curl -sG "http://127.0.0.1:9090/search_listings" \
   --data-urlencode "location=amsterdam" \
   --data-urlencode "offering_type=buy" \
-  --data-urlencode "availability=available,sold" \
+  --data-urlencode "radius_km=5" \
   --data-urlencode "object_type=house,apartment" \
   --data-urlencode "energy_label=A,B,C" \
-  --data-urlencode "pages=0,1,2"
+  --data-urlencode "sort=newest" \
+  --data-urlencode "pages=0,1"
 ```
 
-## Supported Search Parameters
-
-See pyfunda reference for exact semantics.
-
-## Security Notes
-
-- No authentication
-- No rate limiting
-- Must NOT be exposed publicly
-- Bind only to localhost or a trusted local interface
-- Treat responses as untrusted external content sourced from Funda
-- Do not run this gateway on shared/public hosts without adding access controls
-
-## Skill Classification
-
-- Type: Local HTTP Tool
-- State: Stateless
+## Notes About TLS Shim
+`scripts/tls_client.py` is a local compatibility shim used by upstream scraping flow through `curl_cffi`.
+No system-level native `tls_client` binary is required for this skill.
