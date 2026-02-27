@@ -48,7 +48,9 @@ def _as_list_param(value):
     result = []
     for item in items:
         if isinstance(item, str):
-            result.extend(part.strip() for part in item.split(",") if part.strip())
+            result.extend(
+                part.strip().lower() for part in item.split(",") if part.strip()
+            )
         elif item is not None:
             result.append(str(item))
     return result
@@ -70,7 +72,7 @@ def _as_optional_str(value):
         if not value:
             return None
         value = value[0]
-    text = str(value).strip()
+    text = str(value).strip().lower()
     return text or None
 
 
@@ -254,6 +256,7 @@ def spin_up_server(server_port, funda_timeout):
         page=Parameter("page", default=""),  # Backward-compatible single page alias
         pages=Parameter("pages", default="0"),  # Page numbers (15 results per page)
     ):
+        location = _as_optional_str(location) or "amsterdam"
         object_type = _as_list_param(object_type) or None
         energy_label = _as_list_param(energy_label) or None
         availability = _as_list_param(availability) or None

@@ -61,7 +61,7 @@ class TestFundaGateway(unittest.TestCase):
         self.assertEqual(self.module.fetch_public_id(url), "12345678")
 
     def test_as_list_param_splits_csv_string(self):
-        self.assertEqual(self.module._as_list_param("A,B,C"), ["A", "B", "C"])
+        self.assertEqual(self.module._as_list_param("A,B,C"), ["a", "b", "c"])
 
     def test_as_list_param_keeps_list_and_splits_nested_csv_items(self):
         self.assertEqual(
@@ -71,7 +71,7 @@ class TestFundaGateway(unittest.TestCase):
 
     def test_as_list_param_handles_none_and_non_string_items(self):
         self.assertEqual(self.module._as_list_param(None), [])
-        self.assertEqual(self.module._as_list_param([1, None, "A"]), ["1", "A"])
+        self.assertEqual(self.module._as_list_param([1, None, "A"]), ["1", "a"])
 
     def test_optional_converters_return_none_for_blank_values(self):
         self.assertIsNone(self.module._as_optional_int(""))
@@ -80,6 +80,7 @@ class TestFundaGateway(unittest.TestCase):
         self.assertIsNone(self.module._as_optional_str(""))
         self.assertIsNone(self.module._as_optional_str("   "))
         self.assertEqual(self.module._as_optional_str(" newest "), "newest")
+        self.assertEqual(self.module._as_optional_str(" AmSterDam "), "amsterdam")
 
     def test_parse_args_uses_defaults(self):
         with mock.patch.object(sys, "argv", ["funda_gateway.py"]):
@@ -182,6 +183,9 @@ class TestFundaGateway(unittest.TestCase):
         self.assertEqual(funda_instance["value"].search_kwargs["radius_km"], 10)
         self.assertEqual(funda_instance["value"].search_kwargs["page"], 2)
         self.assertEqual(funda_instance["value"].search_kwargs["price_min"], 100000)
+        self.assertEqual(
+            funda_instance["value"].search_kwargs["location"], "amsterdam"
+        )
 
     def test_search_listings_supports_multiple_pages_and_merges_results(self):
         routes = {}
@@ -346,7 +350,7 @@ class TestFundaGateway(unittest.TestCase):
         routes["/search_listings"](
             location="Amsterdam",
             offering_type="buy",
-            availability="available,sold",
+            availability="Available,SOLD",
             pages="0",
         )
 
