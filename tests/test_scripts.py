@@ -3,6 +3,7 @@ import sys
 import types
 import unittest
 import base64
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -500,6 +501,110 @@ class TestFundaGateway(unittest.TestCase):
             max_size=256,
             quality=60,
         )
+
+    def test_get_previews_save_mode_writes_files_and_returns_paths(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeListing(dict):
+            pass
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                return FakeListing(
+                    photo_urls=[
+                        "https://cloud.funda.nl/valentina_media/224/802/529.jpg",
+                    ]
+                )
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        class FakeHTTPResponse:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def read(self):
+                return self._payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_root = Path(tmpdir)
+            with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+                self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+            ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+                self.module, "is_port_listening", return_value=False
+            ), mock.patch.object(self.module, "SKILL_ROOT", skill_root):
+                self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+            with mock.patch.object(
+                self.module.urllib.request,
+                "urlopen",
+                return_value=FakeHTTPResponse(b"thumb-bytes"),
+            ), mock.patch.object(
+                self.module,
+                "_build_preview_base64",
+                return_value=("image/jpeg", base64.b64encode(b"tiny").decode("ascii")),
+            ):
+                response = routes["/get_previews/{id}"](
+                    id="43242669",
+                    limit="1",
+                    save="1",
+                    dir="previews",
+                    filename_pattern="{id}_{index}",
+                    ids="224/802/529",
+                )
+
+            self.assertEqual(response["count"], 1)
+            preview = response["previews"][0]
+            self.assertNotIn("base64", preview)
+            self.assertTrue(Path(preview["saved_path"]).exists())
+            self.assertEqual(preview["relative_path"], "previews/43242669_1.jpg")
+            self.assertEqual(
+                Path(preview["saved_path"]).read_bytes(),
+                b"tiny",
+            )
+
+            with mock.patch.object(
+                self.module.urllib.request,
+                "urlopen",
+                return_value=FakeHTTPResponse(b"thumb-bytes"),
+            ), mock.patch.object(
+                self.module,
+                "_build_preview_base64",
+                return_value=("image/jpeg", base64.b64encode(b"tiny").decode("ascii")),
+            ):
+                response_default = routes["/get_previews/{id}"](
+                    id="43242669",
+                    limit="1",
+                    save="1",
+                    ids="224/802/529",
+                )
+
+            preview_default = response_default["previews"][0]
+            self.assertEqual(
+                preview_default["relative_path"],
+                "previews/43242669/224-802-529.jpg",
+            )
+            self.assertNotIn("base64", preview_default)
+            self.assertTrue(Path(preview_default["saved_path"]).exists())
 
     def test_spin_up_server_price_history_is_keyed_by_date(self):
         routes = {}

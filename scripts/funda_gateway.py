@@ -1,6 +1,7 @@
 import argparse
 import base64
 import io
+from pathlib import Path
 import socket
 import time
 import urllib.error
@@ -12,6 +13,7 @@ from simple_http_server.basic_models import Parameter
 from funda import Funda
 
 MULTI_PAGE_REQUEST_DELAY_SECONDS = 0.3
+SKILL_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args():
@@ -90,6 +92,25 @@ def _build_preview_base64(image_bytes, max_size=320, quality=65):
     return "image/jpeg", base64.b64encode(preview_bytes).decode("ascii")
 
 
+def _as_bool_flag(value):
+    text = (_as_optional_str(value) or "").lower()
+    return text in {"1", "true", "yes", "on"}
+
+
+def _resolve_output_base_dir(dir_value):
+    relative = _as_optional_str(dir_value) or "previews"
+    relative_path = Path(relative)
+    if relative_path.is_absolute():
+        raise ValueError("dir must be a relative path")
+
+    base_dir = (SKILL_ROOT / relative_path).resolve()
+    skill_root_resolved = SKILL_ROOT.resolve()
+    if skill_root_resolved not in base_dir.parents and base_dir != skill_root_resolved:
+        raise ValueError("dir must stay inside skill root")
+
+    return base_dir
+
+
 def is_port_listening(port, host="127.0.0.1", timeout=0.5):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(timeout)
@@ -117,6 +138,9 @@ def spin_up_server(server_port, funda_timeout):
         limit=Parameter("limit", default="5"),  # Maximum number of previews to return
         preview_size=Parameter("preview_size", default="320"),  # Max preview side in px
         preview_quality=Parameter("preview_quality", default="65"),  # JPEG quality
+        save=Parameter("save", default="0"),  # Save resized previews to disk
+        dir=Parameter("dir", default=""),  # Relative output directory inside skill root
+        filename_pattern=Parameter("filename_pattern", default=""),  # e.g. {id}_{index}
         ids=Parameter("ids", default=""),
     ):  # Comma-separated photo IDs (like 224/802/529). If omitted, take first N photos.
         listing = f.get_listing(id)
@@ -136,6 +160,12 @@ def spin_up_server(server_port, funda_timeout):
         max_size = max(64, min(max_size, 1024))
         quality = _as_optional_int(preview_quality) or 65
         quality = max(30, min(quality, 90))
+        should_save = _as_bool_flag(save)
+        pattern = _as_optional_str(filename_pattern)
+
+        output_base_dir = None
+        if should_save:
+            output_base_dir = _resolve_output_base_dir(dir)
 
         if ids:
             urls_to_download = [
@@ -149,7 +179,7 @@ def spin_up_server(server_port, funda_timeout):
         urls_to_download = urls_to_download[:max_items]
         previews = []
 
-        for url in urls_to_download:
+        for index, url in enumerate(urls_to_download, start=1):
             photo_id = "/".join(url.split("/")[-3:]).split(".")[0]
             try:
                 request = urllib.request.Request(
@@ -165,9 +195,34 @@ def spin_up_server(server_port, funda_timeout):
                         "id": photo_id,
                         "url": url,
                         "content_type": content_type,
-                        "base64": encoded,
                     }
                 )
+
+                if not should_save:
+                    previews[-1]["base64"] = encoded
+
+                if should_save and output_base_dir is not None:
+                    safe_photo_id = photo_id.replace("/", "-")
+                    if pattern:
+                        filename = pattern.format(id=id, index=index, photo_id=safe_photo_id)
+                        filename = Path(filename).name
+                    else:
+                        filename = f"{safe_photo_id}.jpg"
+                    if not filename.lower().endswith(".jpg"):
+                        filename = f"{filename}.jpg"
+
+                    if pattern:
+                        target_dir = output_base_dir
+                    else:
+                        target_dir = output_base_dir / str(id)
+                    target_dir.mkdir(parents=True, exist_ok=True)
+
+                    output_path = target_dir / filename
+                    output_path.write_bytes(base64.b64decode(encoded))
+                    previews[-1]["saved_path"] = str(output_path.resolve())
+                    previews[-1]["relative_path"] = str(
+                        output_path.resolve().relative_to(SKILL_ROOT.resolve())
+                    )
             except urllib.error.URLError as exc:
                 previews.append(
                     {

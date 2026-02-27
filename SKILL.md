@@ -160,6 +160,11 @@ This endpoint is intended for AI/agent workflows where full-size images are too 
 - `preview_size` (default: `320`) — max width/height in pixels
 - `preview_quality` (default: `65`) — JPEG quality for compressed previews
 - `ids` (optional) — comma-separated photo IDs (`224/802/529,224/802/532`)
+- `save` (optional, default: `0`) — set to `1` to save generated previews to disk
+- `dir` (optional, default: `previews`) — relative output directory inside the skill folder
+- `filename_pattern` (optional) — output filename template (e.g. `{id}_{index}.jpg`)
+  - Supported placeholders: `{id}`, `{index}`, `{photo_id}`
+  - If omitted, default filename is `<photo-id>.jpg` and files are saved under `previews/<listing-id>/`
 
 **Response**
 - `id`: listing public ID
@@ -168,7 +173,9 @@ This endpoint is intended for AI/agent workflows where full-size images are too 
   - `id`
   - `url`
   - `content_type` (currently `image/jpeg`)
-  - `base64` (resized preview bytes)
+  - `base64` (resized preview bytes, only when `save=0`)
+  - `saved_path` (when `save=1`) absolute path of saved preview
+  - `relative_path` (when `save=1`) path relative to skill root
 
 **Example**
 ```bash
@@ -176,6 +183,13 @@ curl -sG "http://127.0.0.1:9090/get_previews/43243137" \
   --data-urlencode "limit=3" \
   --data-urlencode "preview_size=256" \
   --data-urlencode "preview_quality=60"
+
+# Save previews to disk
+curl -sG "http://127.0.0.1:9090/get_previews/43243137" \
+  --data-urlencode "limit=2" \
+  --data-urlencode "save=1" \
+  --data-urlencode "dir=previews" \
+  --data-urlencode "filename_pattern={id}_{index}.jpg"
 ```
 
 ### 4. Search Listings
