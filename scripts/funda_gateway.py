@@ -1,11 +1,11 @@
 import argparse
 import base64
 import io
-from pathlib import Path
 import socket
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from simple_http_server import PathValue, route, server
 from simple_http_server.basic_models import Parameter
@@ -35,6 +35,14 @@ def fetch_public_id(url):
         return url.rstrip("/").split("/")[-1]
     except IndexError:
         raise ValueError(f"Invalid Funda listing URL: {url}")
+
+
+def _ensure_boundries(value, min_value, max_value):
+    if value < min_value:
+        return min_value
+    if value > max_value:
+        return max_value
+    return value
 
 
 def _as_list_param(value, lowercase=True):
@@ -80,6 +88,11 @@ def _as_optional_str(value):
     return text or None
 
 
+def _as_bool_flag(value):
+    text = (_as_optional_str(value) or "").lower()
+    return text in {"1", "true", "yes", "on"}
+
+
 def _build_preview_base64(image_bytes, max_size=320, quality=65):
     try:
         from PIL import Image
@@ -96,11 +109,6 @@ def _build_preview_base64(image_bytes, max_size=320, quality=65):
         preview_bytes = output.getvalue()
 
     return "image/jpeg", base64.b64encode(preview_bytes).decode("ascii")
-
-
-def _as_bool_flag(value):
-    text = (_as_optional_str(value) or "").lower()
-    return text in {"1", "true", "yes", "on"}
 
 
 def _resolve_output_base_dir(dir_value):
@@ -149,23 +157,30 @@ def spin_up_server(server_port, funda_timeout):
         filename_pattern=Parameter("filename_pattern", default=""),  # e.g. {id}_{index}
         ids=Parameter("ids", default=""),
     ):  # Comma-separated photo IDs (like 224/802/529). If omitted, take first N photos.
+
+        def extract_id(url):
+            # example URL: https://images.funda.nl/hdp/224/802/529/jpeg/224_802_529.jpeg
+            # returns: "224/802/529"
+            return "/".join(url.split("/")[-3:]).split(".")[0]
+
         listing = f.get_listing(id)
         photo_urls = sorted(listing.get("photo_urls") or [])
         if not photo_urls:
             return {"id": id, "count": 0, "previews": []}
 
-        photo_ids_to_urls = {
-            "/".join(url.split("/")[-3:]).split(".")[0]: url for url in photo_urls
-        }
+        photo_ids_to_urls = {extract_id(url): url for url in photo_urls}
 
         ids = _as_list_param(ids)
 
         max_items = _as_optional_int(limit) or 5
-        max_items = max(1, min(max_items, 50))
+        max_items = _ensure_boundries(max_items, 1, 50)
+
         max_size = _as_optional_int(preview_size) or 320
-        max_size = max(64, min(max_size, 1024))
+        max_size = _ensure_boundries(max_size, 64, 1024)
+
         quality = _as_optional_int(preview_quality) or 65
-        quality = max(30, min(quality, 90))
+        quality = _ensure_boundries(quality, 30, 90)
+
         should_save = _as_bool_flag(save)
         pattern = _as_optional_str(filename_pattern)
 
@@ -186,7 +201,7 @@ def spin_up_server(server_port, funda_timeout):
         previews = []
 
         for index, url in enumerate(urls_to_download, start=1):
-            photo_id = "/".join(url.split("/")[-3:]).split(".")[0]
+            photo_id = extract_id(url)
             try:
                 request = urllib.request.Request(
                     url, headers={"User-Agent": "Mozilla/5.0"}
@@ -210,7 +225,9 @@ def spin_up_server(server_port, funda_timeout):
                 if should_save and output_base_dir is not None:
                     safe_photo_id = photo_id.replace("/", "-")
                     if pattern:
-                        filename = pattern.format(id=id, index=index, photo_id=safe_photo_id)
+                        filename = pattern.format(
+                            id=id, index=index, photo_id=safe_photo_id
+                        )
                         filename = Path(filename).name
                     else:
                         filename = f"{safe_photo_id}.jpg"
