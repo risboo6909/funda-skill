@@ -107,7 +107,7 @@ class TestFundaGateway(unittest.TestCase):
 
         mock_funda.assert_not_called()
 
-    def test_spin_up_server_search_listings_returns_public_id_keyed_dict(self):
+    def test_spin_up_server_search_listings_returns_list_response(self):
         routes = {}
 
         def fake_route(path, method=None):
@@ -178,7 +178,9 @@ class TestFundaGateway(unittest.TestCase):
 
         self.assertEqual(started["port"], 9001)
         self.assertEqual(started["host"], "127.0.0.1")
-        self.assertEqual(response, {"43242669": {"address": "Amsterdam"}})
+        self.assertEqual(response["count"], 1)
+        self.assertEqual(response["items"][0]["public_id"], "43242669")
+        self.assertEqual(response["items"][0]["address"], "Amsterdam")
         self.assertEqual(funda_instance["value"].timeout, 7)
         self.assertEqual(funda_instance["value"].search_kwargs["radius_km"], 10)
         self.assertEqual(funda_instance["value"].search_kwargs["page"], 2)
@@ -257,8 +259,9 @@ class TestFundaGateway(unittest.TestCase):
                 self.module.MULTI_PAGE_REQUEST_DELAY_SECONDS
             )
         self.assertEqual(funda_instance["value"].calls, [0, 1, 2])
+        self.assertEqual(response["count"], 3)
         self.assertEqual(
-            sorted(response.keys()),
+            sorted(item["public_id"] for item in response["items"]),
             ["01111111", "11111111", "21111111"],
         )
 
@@ -308,6 +311,50 @@ class TestFundaGateway(unittest.TestCase):
         )
 
         self.assertEqual(funda_instance["value"].calls, [3])
+
+    def test_search_listings_returns_list_response_by_default(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeListing(dict):
+            def to_dict(self):
+                return {"address": "Amsterdam"}
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                return [
+                    FakeListing(
+                        detail_url="https://www.funda.nl/detail/koop/amsterdam/huis/43242669/"
+                    )
+                ]
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        response = routes["/search_listings"](location="Amsterdam", pages="0")
+
+        self.assertEqual(response["count"], 1)
+        self.assertEqual(response["items"][0]["public_id"], "43242669")
+        self.assertEqual(response["items"][0]["address"], "Amsterdam")
 
     def test_search_listings_passes_availability_list(self):
         routes = {}
@@ -659,6 +706,188 @@ class TestFundaGateway(unittest.TestCase):
             )
             self.assertNotIn("base64", preview_default)
             self.assertTrue(Path(preview_default["saved_path"]).exists())
+
+    def test_get_previews_save_mode_preserves_dir_and_filename_case(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeListing(dict):
+            pass
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                return FakeListing(
+                    photo_urls=[
+                        "https://cloud.funda.nl/valentina_media/224/802/529.jpg",
+                    ]
+                )
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        class FakeHTTPResponse:
+            def __init__(self, payload):
+                self._payload = payload
+
+            def read(self):
+                return self._payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                return False
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_root = Path(tmpdir)
+            with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+                self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+            ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+                self.module, "is_port_listening", return_value=False
+            ), mock.patch.object(self.module, "SKILL_ROOT", skill_root):
+                self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+            with mock.patch.object(
+                self.module.urllib.request,
+                "urlopen",
+                return_value=FakeHTTPResponse(b"thumb-bytes"),
+            ), mock.patch.object(
+                self.module,
+                "_build_preview_base64",
+                return_value=("image/jpeg", base64.b64encode(b"tiny").decode("ascii")),
+            ):
+                response = routes["/get_previews/{id}"](
+                    id="43242669",
+                    limit="1",
+                    save="1",
+                    dir="MyPreviews",
+                    filename_pattern="Case_{id}_{index}.jpg",
+                    ids="224/802/529",
+                )
+
+            preview = response["previews"][0]
+            self.assertEqual(preview["relative_path"], "MyPreviews/Case_43242669_1.jpg")
+            self.assertTrue(Path(preview["saved_path"]).exists())
+
+    def test_search_listings_returns_400_for_invalid_numeric_param(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                raise AssertionError("not used in this test")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        response = routes["/search_listings"](
+            location="Amsterdam",
+            radius_km="2km",
+            pages="0",
+        )
+
+        self.assertEqual(response[0], 400)
+        self.assertEqual(response[1]["error"]["code"], "invalid_parameter")
+        self.assertEqual(response[1]["error"]["details"]["field"], "radius_km")
+
+    def test_get_listing_returns_error_envelope_when_not_found(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                raise LookupError("not found")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        response = routes["/get_listing/{id}"](id="99999999")
+        self.assertEqual(response[0], 404)
+        self.assertEqual(response[1]["error"]["code"], "listing_not_found")
+
+    def test_get_price_history_returns_error_envelope_when_not_found(self):
+        routes = {}
+
+        def fake_route(path, method=None):
+            def decorator(fn):
+                routes[path] = fn
+                return fn
+
+            return decorator
+
+        class FakeFunda:
+            def __init__(self, timeout):
+                self.timeout = timeout
+
+            def get_listing(self, path_part):
+                raise LookupError("not found")
+
+            def get_price_history(self, listing):
+                raise AssertionError("not used in this test")
+
+            def search_listing(self, **kwargs):
+                raise AssertionError("not used in this test")
+
+        with mock.patch.object(self.module, "route", fake_route), mock.patch.object(
+            self.module, "server", types.SimpleNamespace(start=lambda host, port: None)
+        ), mock.patch.object(self.module, "Funda", FakeFunda), mock.patch.object(
+            self.module, "is_port_listening", return_value=False
+        ):
+            self.module.spin_up_server(server_port=9001, funda_timeout=7)
+
+        response = routes["/get_price_history/{id}"](id="99999999")
+        self.assertEqual(response[0], 404)
+        self.assertEqual(response[1]["error"]["code"], "listing_not_found")
 
     def test_spin_up_server_price_history_is_keyed_by_date(self):
         routes = {}

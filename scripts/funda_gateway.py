@@ -16,6 +16,13 @@ MULTI_PAGE_REQUEST_DELAY_SECONDS = 0.3
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 
 
+class ValidationError(ValueError):
+    def __init__(self, field, message):
+        super().__init__(message)
+        self.field = field
+        self.message = message
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Funda Gateway")
     parser.add_argument(
@@ -68,29 +75,43 @@ def _as_list_param(value, lowercase=True):
     return result
 
 
-def _as_optional_int(value):
+def _as_optional_int(value, field_name=None):
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
-    return int(text)
+    try:
+        return int(text)
+    except (TypeError, ValueError) as exc:
+        if field_name is None:
+            raise
+        raise ValidationError(field_name, "must be an integer") from exc
 
 
-def _as_optional_str(value):
+def _as_optional_str(value, lowercase=True):
     if value is None:
         return None
     if isinstance(value, list):
         if not value:
             return None
         value = value[0]
-    text = str(value).strip().lower()
+    text = str(value).strip()
+    if lowercase:
+        text = text.lower()
     return text or None
 
 
 def _as_bool_flag(value):
-    text = (_as_optional_str(value) or "").lower()
+    text = (_as_optional_str(value, lowercase=True) or "").lower()
     return text in {"1", "true", "yes", "on"}
+
+
+def _error_response(status_code, code, message, details=None):
+    body = {"error": {"code": code, "message": message}}
+    if details is not None:
+        body["error"]["details"] = details
+    return (status_code, body)
 
 
 def _build_preview_base64(image_bytes, max_size=320, quality=65):
@@ -112,7 +133,7 @@ def _build_preview_base64(image_bytes, max_size=320, quality=65):
 
 
 def _resolve_output_base_dir(dir_value):
-    relative = _as_optional_str(dir_value) or "previews"
+    relative = _as_optional_str(dir_value, lowercase=False) or "previews"
     relative_path = Path(relative)
     if relative_path.is_absolute():
         raise ValueError("dir must be a relative path")
@@ -139,12 +160,26 @@ def spin_up_server(server_port, funda_timeout):
 
     @route("/get_listing/{id}", method=["GET"])
     def get_listing(id=PathValue()):
-        return f.get_listing(id).to_dict()
+        try:
+            return f.get_listing(id).to_dict()
+        except LookupError:
+            return _error_response(404, "listing_not_found", f"Listing '{id}' was not found")
+        except ValueError as exc:
+            return _error_response(400, "invalid_listing_id", str(exc))
+        except Exception as exc:
+            return _error_response(502, "upstream_error", str(exc))
 
     @route("/get_price_history/{id}", method=["GET"])
     def get_price_history(id=PathValue()):
-        listing = f.get_listing(id)
-        return {item["date"]: item for item in f.get_price_history(listing)}
+        try:
+            listing = f.get_listing(id)
+            return {item["date"]: item for item in f.get_price_history(listing)}
+        except LookupError:
+            return _error_response(404, "listing_not_found", f"Listing '{id}' was not found")
+        except ValueError as exc:
+            return _error_response(400, "invalid_listing_id", str(exc))
+        except Exception as exc:
+            return _error_response(502, "upstream_error", str(exc))
 
     @route("/get_previews/{id}", method=["GET"])
     def get_previews(
@@ -163,7 +198,15 @@ def spin_up_server(server_port, funda_timeout):
             # returns: "224/802/529"
             return "/".join(url.split("/")[-3:]).split(".")[0]
 
-        listing = f.get_listing(id)
+        try:
+            listing = f.get_listing(id)
+        except LookupError:
+            return _error_response(404, "listing_not_found", f"Listing '{id}' was not found")
+        except ValueError as exc:
+            return _error_response(400, "invalid_listing_id", str(exc))
+        except Exception as exc:
+            return _error_response(502, "upstream_error", str(exc))
+
         photo_urls = sorted(listing.get("photo_urls") or [])
         if not photo_urls:
             return {"id": id, "count": 0, "previews": []}
@@ -172,21 +215,37 @@ def spin_up_server(server_port, funda_timeout):
 
         ids = _as_list_param(ids)
 
-        max_items = _as_optional_int(limit) or 5
-        max_items = _ensure_boundries(max_items, 1, 50)
+        try:
+            max_items = _as_optional_int(limit, "limit") or 5
+            max_items = _ensure_boundries(max_items, 1, 50)
 
-        max_size = _as_optional_int(preview_size) or 320
-        max_size = _ensure_boundries(max_size, 64, 1024)
+            max_size = _as_optional_int(preview_size, "preview_size") or 320
+            max_size = _ensure_boundries(max_size, 64, 1024)
 
-        quality = _as_optional_int(preview_quality) or 65
-        quality = _ensure_boundries(quality, 30, 90)
+            quality = _as_optional_int(preview_quality, "preview_quality") or 65
+            quality = _ensure_boundries(quality, 30, 90)
+        except ValidationError as exc:
+            return _error_response(
+                400,
+                "invalid_parameter",
+                "Invalid numeric query parameter",
+                {"field": exc.field, "reason": exc.message},
+            )
 
         should_save = _as_bool_flag(save)
-        pattern = _as_optional_str(filename_pattern)
+        pattern = _as_optional_str(filename_pattern, lowercase=False)
 
         output_base_dir = None
         if should_save:
-            output_base_dir = _resolve_output_base_dir(dir)
+            try:
+                output_base_dir = _resolve_output_base_dir(dir)
+            except ValueError as exc:
+                return _error_response(
+                    400,
+                    "invalid_parameter",
+                    "Invalid directory parameter",
+                    {"field": "dir", "reason": str(exc)},
+                )
 
         if ids:
             urls_to_download = [
@@ -225,9 +284,20 @@ def spin_up_server(server_port, funda_timeout):
                 if should_save and output_base_dir is not None:
                     safe_photo_id = photo_id.replace("/", "-")
                     if pattern:
-                        filename = pattern.format(
-                            id=id, index=index, photo_id=safe_photo_id
-                        )
+                        try:
+                            filename = pattern.format(
+                                id=id, index=index, photo_id=safe_photo_id
+                            )
+                        except KeyError as exc:
+                            return _error_response(
+                                400,
+                                "invalid_parameter",
+                                "Invalid filename pattern",
+                                {
+                                    "field": "filename_pattern",
+                                    "reason": f"unknown placeholder '{exc.args[0]}'",
+                                },
+                            )
                         filename = Path(filename).name
                     else:
                         filename = f"{safe_photo_id}.jpg"
@@ -286,31 +356,53 @@ def spin_up_server(server_port, funda_timeout):
         if not pages:
             single_page = _as_optional_int(page)
             pages = [str(single_page)] if single_page is not None else ["0"]
-        pages = list(map(int, pages))
+        try:
+            pages = [_as_optional_int(p, "pages") for p in pages]
+            pages = [p for p in pages if p is not None]
+        except ValidationError as exc:
+            return _error_response(
+                400,
+                "invalid_parameter",
+                "Invalid numeric query parameter",
+                {"field": exc.field, "reason": exc.message},
+            )
+        if not pages:
+            pages = [0]
         offering_type = _as_optional_str(offering_type) or "buy"
         sort = _as_optional_str(sort)
 
         response = {}
 
         for index, page in enumerate(pages):
-            search_kwargs = {
-                "location": location,
-                "offering_type": offering_type,
-                "availability": availability,
-                "radius_km": _as_optional_int(radius_km),
-                "price_min": _as_optional_int(price_min),
-                "price_max": _as_optional_int(price_max),
-                "area_min": _as_optional_int(area_min),
-                "area_max": _as_optional_int(area_max),
-                "plot_min": _as_optional_int(plot_min),
-                "plot_max": _as_optional_int(plot_max),
-                "object_type": object_type,
-                "energy_label": energy_label,
-                "sort": sort,
-                "page": page,
-            }
+            try:
+                search_kwargs = {
+                    "location": location,
+                    "offering_type": offering_type,
+                    "availability": availability,
+                    "radius_km": _as_optional_int(radius_km, "radius_km"),
+                    "price_min": _as_optional_int(price_min, "price_min"),
+                    "price_max": _as_optional_int(price_max, "price_max"),
+                    "area_min": _as_optional_int(area_min, "area_min"),
+                    "area_max": _as_optional_int(area_max, "area_max"),
+                    "plot_min": _as_optional_int(plot_min, "plot_min"),
+                    "plot_max": _as_optional_int(plot_max, "plot_max"),
+                    "object_type": object_type,
+                    "energy_label": energy_label,
+                    "sort": sort,
+                    "page": page,
+                }
+            except ValidationError as exc:
+                return _error_response(
+                    400,
+                    "invalid_parameter",
+                    "Invalid numeric query parameter",
+                    {"field": exc.field, "reason": exc.message},
+                )
             print(f"[funda_gateway] search_listing kwargs: {search_kwargs}")
-            results = f.search_listing(**search_kwargs)
+            try:
+                results = f.search_listing(**search_kwargs)
+            except Exception as exc:
+                return _error_response(502, "upstream_error", str(exc))
             response.update(
                 {
                     fetch_public_id(item["detail_url"]): item.to_dict()
@@ -320,7 +412,12 @@ def spin_up_server(server_port, funda_timeout):
             if index < len(pages) - 1:
                 time.sleep(MULTI_PAGE_REQUEST_DELAY_SECONDS)
 
-        return response
+        items = []
+        for public_id, listing in response.items():
+            item = dict(listing)
+            item.setdefault("public_id", public_id)
+            items.append(item)
+        return {"count": len(items), "items": items}
 
     server.start(host="127.0.0.1", port=server_port)
 

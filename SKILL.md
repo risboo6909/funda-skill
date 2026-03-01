@@ -92,6 +92,7 @@ Save behavior:
 - default file path without pattern: `previews/<listing-id>/<photo-id>.jpg`
 - with pattern: files are saved directly under `dir`
 - `dir` must be relative and stay inside skill root
+- `dir` and `filename_pattern` preserve original letter case
 
 Examples:
 ```bash
@@ -128,8 +129,11 @@ Search wrapper over `pyfunda.search_listing`.
 #### Important behavior
 - `pages` takes precedence over `page`
 - `pages` can be `0` or CSV like `0,1,2`
-- multiple pages are merged into one JSON keyed by listing public id
+- multiple pages are merged into one list response
 - delay between pages: `0.3s`
+- response format is always:
+  - `{ "count": N, "items": [ ... ] }`
+  - each item includes `public_id`
 
 #### Parameter normalization
 - Most string params are lowercased by gateway
@@ -137,6 +141,24 @@ Search wrapper over `pyfunda.search_listing`.
 - list params accept CSV or repeated values
 - omitted optional filters are passed as `None`
 - default `offering_type` is `buy`
+
+## Error Contract (Agent-Friendly)
+For validation/upstream failures, endpoints return JSON error envelope:
+
+```json
+{
+  "error": {
+    "code": "invalid_parameter|invalid_listing_id|listing_not_found|upstream_error",
+    "message": "...",
+    "details": { "field": "...", "reason": "..." }
+  }
+}
+```
+
+Status codes:
+- `400` invalid query/path parameter
+- `404` listing not found
+- `502` upstream/client failure while fetching data
 
 #### Not supported by gateway
 These are ignored because they are not in endpoint signature:
