@@ -66,6 +66,8 @@ The agent sends HTTP requests to this local server, and the server:
 The gateway is written in Python and kept intentionally minimal.  
 This reduces errors, makes agent interaction more reliable, and allows new features to be added later with minimal changes if needed.
 
+Search results are returned in a consistent structured format, which makes filtering and ranking reliable for AI agents.
+
 ## Final Words
 
 If you find this skill useful, please consider giving it a star on GitHub and sharing it with friends who are also searching for housing in the Netherlands.
